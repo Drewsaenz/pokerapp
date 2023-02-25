@@ -1,0 +1,103 @@
+body {
+  background-image: url('poker-5.jpg');
+  background-position: center;
+  background-size: cover;
+  position: relative;
+  height: 100vh;
+}
+
+.container {
+  width: 80%;
+  margin: 0 auto;
+  text-align: center;
+}
+
+h1 {
+  font-size: 38px;
+  color: white;
+  margin-top: 100px;
+  margin-bottom: 50px;
+  margin-left: 10px;
+  display: flex;
+  justify-content: left;
+  text-align: left;
+}
+
+div {
+  text-align: center;
+  width: 130px;
+  margin: 10px;
+  border-radius: 10px;
+}
+
+form {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: left;
+  margin: 10px;
+  text-align: left;
+  color: white;
+  z-index: 999;
+}
+  
+label {
+  margin-right: 10px;
+}
+
+select, input {
+  margin-bottom: 10px;
+  width: 150px;
+  padding: 5px;
+  border-radius: 5px;
+  border: none;
+  box-shadow: 0 0 5px gray;
+}
+
+button {
+  padding: 10px;
+  border-radius: 5px;
+  border: none;
+  box-shadow: 0 0 0 2px gray;
+  background-color: #4CAF50;
+  color: white;
+  font-size: 16px;
+  width: 150px;
+
+}
+  
+button:hover {
+  cursor: pointer;
+  background-color: #3e8e41;
+}
+
+p {
+  font-size: 18px;
+  text-align: center;
+  width: 120px; /* or the width of your button */
+}
+
+#action {
+  background-color: gray;
+  color: white;
+  font-size: 24px;
+  padding: 10px;
+  border-radius: 5px;
+  visibility: hidden;
+  transition: visibility 0s linear 0.5s, background-color 0.5s;
+}
+
+#action.visible {
+  visibility: visible;
+}
+
+#action.fold {
+  background-color: red;
+}
+
+#action.raise {
+  background-color: green;
+}
+
+
+

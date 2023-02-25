@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="Poker App" content="This app takes in Texas Hold'em Poker pre-flop parameters and suggests an action." />
+        <title>Pre-Flop Hand Action Generator</title>
+        <link rel="stylesheet" type="text/css" href="style.css" />
+        <link rel="icon" type="image/png" href="casino.png">
+    </head>
+    <body>
+        <h1>Texas Hold'em <br/> Pre-Flop Action <br />Generator</h1>
+        <form id="my-form">
+            <label for="position">Position:</label>
+            <select id="position">
+                <option value="UTG">
+                    UTG
+                </option>
+                <option value="UTG+1">
+                    UTG+1
+                </option>
+                <option value="UTG+2">
+                    UTG+2
+                </option>
+                <option value="LJ">
+                    LJ
+                </option>
+                <option value="HJ">
+                    HJ
+                </option>
+                <option value="Button">
+                    CO
+                </option>
+                <option value="Button">
+                    Button
+                </option>
+                <option value="Small Blind">
+                    Small Blind
+                </option>
+            </select>
+            <label for="facing">Facing:</label>
+            <select id="facing">
+                <option value="Raise First In">
+                    Raise First In
+                </option>
+                <option value="Facing RFI">
+                    RFI vs UTG
+                </option>
+                <option value="Facing RFI">
+                    RFI vs UTG+1
+                </option>
+                <option value="Facing RFI">
+                    RFI vs UTG+2
+                </option>
+                <option value="Facing RFI">
+                    RFI vs LJ
+                </option>
+                <option value="Facing RFI">
+                    RFI vs HJ
+                </option>
+                <option value="Facing RFI">
+                    RFI vs CO
+                </option>
+                <option value="Facing RFI">
+                    RFI vs Button
+                </option>
+                <option value="Facing RFI">
+                    RFI vs SB
+                </option>
+                <option value="UTG RFI vs 3bet">
+                    UTG RFI vs 3bet
+                </option>
+                <option value="UTG+1 RFI vs 3bet">
+                    UTG+1 RFI vs 3bet
+                </option>
+                <option value="UTG+2 RFI vs 3bet">
+                    UTG+2 RFI vs 3bet
+                </option>
+                <option value="LJ RFI vs 3bet">
+                    LJ RFI vs 3bet
+                </option>
+                <option value="HJ/CO RFI vs 3bet">
+                    HJ/CO RFI vs 3bet
+                </option>
+                <option value="BTN/SB RFI vs 3bet">
+                    BTN/SB RFI vs 3bet
+                </option>
+            </select>
+            <label for="hand">Player Hand:</label>
+            <input type="text" id="hand" placeholder="e.g. AKs" />
+            <button type="button" onclick="getAction()">Get Action</button>
+        </form>
+        <div id="action"></div>
+        <script src="app.js"></script>
+    </body>
+</html>
