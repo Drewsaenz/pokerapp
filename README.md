@@ -1,92 +1,50 @@
 # Poker App
 
+Two small, dependency-free Texas Hold'em pre-flop tools. Open either HTML file in a browser — no build step, no server.
 
+## Pre-Flop Action Generator (`index.html`)
 
-## Getting started
+Pick your position, what you're facing, and type a hand (e.g. `AKs`, `T9o`, `77`). The app looks the hand up in hand-coded range lists and tells you whether to raise, 3-bet, 4-bet, call, limp or fold.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+Covers:
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+- **Raise first in** from UTG through the Button, plus a Small Blind strategy split into value raises, bluff raises and limps
+- **Facing an open** from each position (3-bet / call / fold)
+- **Facing a 3-bet** after you opened (4-bet / call / fold)
 
-## Add your files
+Ranges live in `app.js` as plain arrays, so they're easy to tweak to your own preferred charts.
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+## Pre-Flop Simulator (`simulator.html`)
+
+A trainer. You get dealt two cards into a scenario, pick an action, and get graded with an explanation and a running score.
+
+Scenario dimensions (each can be fixed or left random):
+
+| Dimension | Options |
+| --- | --- |
+| Game | Cash game · Tournament early · Tournament middle (antes) · Bubble · Final table |
+| Position | Early (UTG–UTG+2) · Middle (LJ, HJ) · Late (CO, BTN) · Blinds (SB, BB) |
+| Stack depth | Short (8–15bb) · Medium (25–40bb) · Deep (100bb+), or realistic for the stage |
+| Action to you | Folded to you · Facing a raise |
+| Hands dealt | Mostly tough spots (near the decision boundary) · Fully random |
+
+Keyboard: `1`–`3` to choose an action, `Enter` or `Space` for the next hand.
+
+### How the simulator decides
+
+Rather than hand-coding a range list for every combination of stage × position × stack × spot, `simulator.js` ranks all 169 starting hands once and compares a hand's percentile against a threshold that's adjusted for the scenario:
+
+1. **Two hand rankings.** `PLAY_RANKING` orders hands by playability (suited connectors and wheel aces rank high) and is used when stacks are deep enough to see flops. `SHOVE_RANKING` orders hands by all-in equity against a random hand (offsuit high cards rank high) and is used for short-stack push/fold spots.
+2. **Base frequencies.** `OPEN_PCT` gives how often each position opens at 100bb; `SHOVE_PCT` gives open-jam frequencies at ~12bb; `VS_OPEN_PCT` and `VS_OPEN_SHORT_PCT` give 3-bet / call / re-jam frequencies by the opener's position group.
+3. **Multipliers.** `HERO_VS_OPEN_MOD` adjusts for your own position (the BB defends wide, the SB mostly 3-bets or folds), `STACK_DEPTHS` tightens flat-calls at medium stacks, and `GAME_STAGES` applies tournament adjustments — wider opens once antes kick in, tighter calls under bubble and final-table ICM pressure, and shove ranges that widen as the stack shrinks.
+
+The thresholds are approximations of common charts, not solver output. All the numbers are at the top of `simulator.js` if you want to tune them.
+
+## Files
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/drewsaenz11/poker-app.git
-git branch -M main
-git push -uf origin main
+index.html / app.js / style.css          Action Generator
+simulator.html / simulator.js / simulator.css   Simulator
+casino.png                                Favicon
+poker-5.jpg                               Background for the Action Generator
 ```
-
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://gitlab.com/drewsaenz11/poker-app/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
