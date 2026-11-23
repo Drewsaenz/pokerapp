@@ -49,7 +49,8 @@ A 9-handed table where you play full hands against eight bots, then get feedback
   - estimate each opponent's range from that opponent's actions in the hand (an open, a 3-bet, a call, bets on earlier streets),
   - simulate a few hundred run-outs against those ranges to get their equity, without ever seeing your cards,
   - then value-bet, slow-play, c-bet, semi-bluff, bluff, raise, call or fold, at frequencies set by their style, sizing bets to the board.
-- **Chart check**: after each hand, your first pre-flop decision is compared with the chart.
+- **Chart check**: after each hand, every pre-flop decision you made is graded against the chart: folded to you, facing a raise, facing a 3-bet (cold, after calling, or after opening), facing a 4-bet, facing an all-in or a stack-committing raise, and limped pots in the big blind.
+- **Saved progress** (`storage.js`): your table, every session's results, a results chart and your last 100 hands survive closing the page. On the hosted site they're saved in that browser (each device keeps its own). Opened as a Claude artifact, they're saved privately to your Claude account (last 40 hands) and follow you across devices.
 - **Claude feedback**: opened as a Claude artifact, the page can send a hand (or your last 10) to Claude and show a review in the page. Anywhere else, use "Copy hand history" and paste it into a chat.
 
 Hands are evaluated in `holdem.js` (best five of seven, side pots, split pots). `engine.js` holds the shared pre-flop ranges and `bots.js` the bots' hand reading and decisions.
@@ -62,7 +63,7 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 
 ## Updating the hosted site
 
-GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=3`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
+GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=4`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
 
 ## Files
 
@@ -71,6 +72,7 @@ index.html / app.js / style.css          Action Generator
 simulator.html / simulator.js / simulator.css   Simulator
 holdem.html / holdem.js / holdem.css      Practice Table
 bots.js                                   Practice Table bot styles, hand reading and post-flop decisions
+storage.js                                Practice Table saved progress (browser or Claude account)
 engine.js                                 Pre-flop ranges shared by Simulator and Practice Table
 casino.png                                Favicon
 poker-5.jpg                               Background for the Action Generator
