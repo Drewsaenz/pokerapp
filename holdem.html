@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Play full Texas Hold'em hands at a 9-handed practice table against bots with different playing styles, and get Claude's feedback on each hand." />
     <title>Hold'em Practice Table</title>
-    <link rel="stylesheet" href="holdem.css?v=3" />
+    <link rel="stylesheet" href="holdem.css?v=4" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
     <header class="topbar">
-      <h1>Practice Table <span class="version" title="If this doesn't say v3, reload the page">v3 · bots with styles</span></h1>
+      <h1>Practice Table <span class="version" title="If this doesn't say v4, reload the page">v4 · saves your progress</span></h1>
       <nav class="nav">
         <a href="simulator.html">Pre-Flop Simulator</a>
         <a href="index.html">Action Generator</a>
@@ -90,11 +90,31 @@
           <div class="review-out" id="session-review-out" aria-live="polite"></div>
           <ul class="hand-list" id="hand-list"></ul>
         </section>
+
+        <section class="panel" id="progress-panel">
+          <header class="panel-head panel-head-row">
+            <h2>Progress</h2>
+            <span class="save-status" id="save-status"></span>
+          </header>
+          <dl class="stats" id="progress-stats"></dl>
+          <figure class="chart">
+            <figcaption>Total winnings (bb) after each hand</figcaption>
+            <div class="chart-plot" id="chart-plot"></div>
+          </figure>
+          <div class="sessions-wrap">
+            <table class="sessions-table" id="sessions-table" hidden>
+              <thead><tr><th>Session</th><th class="num">Hands</th><th class="num">Net</th><th class="num">Chart</th></tr></thead>
+              <tbody id="sessions-body"></tbody>
+            </table>
+          </div>
+          <div class="reset-row" id="reset-row"></div>
+        </section>
       </aside>
     </main>
 
-    <script src="engine.js?v=3"></script>
-    <script src="bots.js?v=3"></script>
-    <script src="holdem.js?v=3"></script>
+    <script src="engine.js?v=4"></script>
+    <script src="bots.js?v=4"></script>
+    <script src="storage.js?v=4"></script>
+    <script src="holdem.js?v=4"></script>
   </body>
 </html>

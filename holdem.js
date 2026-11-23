@@ -303,6 +303,9 @@ function newSession() {
   }
   table.button = randomInt(0, SEAT_COUNT - 1);
   $("session-review-out").replaceChildren();
+  startSessionRecord();
+  saveTable();
+  renderProgress();
   playHand();
 }
 
@@ -407,6 +410,8 @@ async function playHand() {
     showdown: [],
     heroNet: 0,
     notice: table.notice,
+    sessionId: table.sessionId,
+    at: Date.now(),
     review: null,
     done: false
   };
@@ -434,6 +439,7 @@ async function playHand() {
 
   settle();
   table.running = false;
+  recordHand(table.hand);
   renderAll();
 }
 
@@ -554,7 +560,8 @@ function settle() {
     winner.stack += pot;
     winner.won = pot;
     var uncalled = winner.total - Math.max.apply(null, ps.filter(function (p, s) { return s !== live[0]; }).map(function (p) { return p.total; }));
-    h.results.push(winner.name + " wins the pot (" + fmtBB(pot - Math.max(0, uncalled), h.bb) + "), no showdown.");
+    h.potWon = pot - Math.max(0, uncalled);
+    h.results.push(winner.name + " wins the pot (" + fmtBB(h.potWon, h.bb) + "), no showdown.");
   } else {
     while (h.board.length < 5) h.board.push(h.deck.pop());
     var hands = {};
@@ -564,6 +571,8 @@ function settle() {
       h.showdown.push({ seat: seat, name: ps[seat].name, pos: ps[seat].pos, cards: ps[seat].cards.slice(), hand: hands[seat].name });
     });
     var pots = buildPots();
+    h.potWon = pots.filter(function (pot) { return pot.eligible.length > 1; })
+      .reduce(function (sum, pot) { return sum + pot.amount; }, 0);
     pots.forEach(function (pot, i) {
       if (pot.eligible.length === 1) {
         ps[pot.eligible[0]].stack += pot.amount;
@@ -779,10 +788,12 @@ function renderTable() {
   var felt = $("felt");
   felt.querySelectorAll(".seat, .bet-chip, .dealer-btn").forEach(function (n) { n.remove(); });
   var h = table.hand;
-  if (!h) return;
+  if (!players().length) return;
+  var bb = h ? h.bb : blinds().bb;
+  var done = !h || h.done;
 
   var winnerSeats = new Set();
-  if (h.done) players().forEach(function (p, s) { if (p.won > 0) winnerSeats.add(s); });
+  if (h && h.done) players().forEach(function (p, s) { if (p.won > 0) winnerSeats.add(s); });
 
   players().forEach(function (p, seat) {
     var pt = seatPoint(seat, 44, 41);
@@ -804,16 +815,16 @@ function renderTable() {
     var top = el("div", "seat-top");
     top.append(el("span", "seat-name", p.name), el("span", "seat-pos", p.pos + (p.style ? " · " + styleOf(p).label : "")));
     if (p.style) node.title = p.name + " plays " + styleOf(p).name;
-    var stack = el("div", "seat-stack", p.allIn && !h.done ? "All-in" : fmtBB(p.stack, h.bb));
+    var stack = el("div", "seat-stack", p.allIn && !done ? "All-in" : fmtBB(p.stack, bb));
     stack.title = fmtChips(p.stack);
     plate.append(top, stack);
-    var act = el("div", "seat-act", winnerSeats.has(seat) ? "Wins " + fmtBB(p.won, h.bb) : p.lastAction);
+    var act = el("div", "seat-act", winnerSeats.has(seat) ? "Wins " + fmtBB(p.won, bb) : p.lastAction);
     node.append(cards, plate, act);
     felt.append(node);
 
-    if (p.bet > 0 && !h.done) {
+    if (p.bet > 0 && !done) {
       var bp = seatPoint(seat, 27, 22);
-      var chip = el("div", "bet-chip", fmtBB(p.bet, h.bb));
+      var chip = el("div", "bet-chip", fmtBB(p.bet, bb));
       chip.style.left = bp.x + "%";
       chip.style.top = bp.y + "%";
       felt.append(chip);
@@ -827,7 +838,16 @@ function renderTable() {
   dealer.title = "Dealer button";
   felt.append(dealer);
 
-  $("pot").textContent = "Pot " + fmtBB(potTotal(), h.bb);
+  if (!h) {
+    $("pot").textContent = "";
+    $("board").replaceChildren();
+    for (var s = 0; s < 5; s++) $("board").append(el("div", "pcard slot lg"));
+    var b = blinds();
+    $("stage-line").textContent = GAME_STAGES[currentStage()].label + " · " + fmtChips(b.sb) + "/" + fmtChips(b.bb) + " · your saved table";
+    return;
+  }
+
+  $("pot").textContent = "Pot " + fmtBB(h.done && h.potWon !== undefined ? h.potWon : potTotal(), h.bb);
   var board = $("board");
   board.replaceChildren();
   for (var i = 0; i < 5; i++) {
@@ -845,7 +865,12 @@ function renderControls() {
   box.replaceChildren();
   var h = table.hand;
 
-  if (!h) {
+  if (table.loading) {
+    box.append(el("p", "controls-note waiting", "Loading your saved table…"));
+    return;
+  }
+
+  if (!h && !players().length) {
     var startBtn = el("button", "btn primary big", "Deal first hand");
     startBtn.type = "button";
     startBtn.addEventListener("click", newSession);
@@ -854,7 +879,7 @@ function renderControls() {
   }
 
   if (table.over) {
-    var out = el("p", "controls-note", "You busted on hand " + h.no + " in level " + (h.level + 1) + ". Review the hand, then start a new tournament.");
+    var out = el("p", "controls-note", "You busted on hand " + table.handNo + " in level " + (table.level + 1) + ". Review the hand, then start a new tournament.");
     var again = el("button", "btn primary", "New tournament");
     again.type = "button";
     again.addEventListener("click", function () { table.over = false; newSession(); });
@@ -879,11 +904,13 @@ function renderControls() {
       top.addEventListener("click", function () {
         hero.stack = start;
         table.topUps += 1;
+        saveTable();
         renderAll();
       });
       row.append(top);
     }
-    box.append(row, el("p", "controls-note", "Enter deals the next hand."));
+    box.append(row, el("p", "controls-note", h ? "Enter deals the next hand." :
+      "Welcome back. Your table, stacks and session are where you left them. A hand that was still in progress when you left isn't saved."));
     return;
   }
 
@@ -1268,7 +1295,7 @@ function renderReview() {
     ask.type = "button";
     ask.disabled = !!activeReview;
     ask.addEventListener("click", function () {
-      runReview(handPrompt(h), out, function (text) { h.review = text; });
+      runReview(handPrompt(h), out, function (text) { h.review = text; persist(); });
     });
     actions.append(ask);
   } else if (sampleState === "pending") {
@@ -1290,6 +1317,284 @@ function renderReview() {
   if (sampleState === "absent") {
     actions.append(el("p", "fb-note", "In-page feedback works when this page is opened in Claude. Here, copy the history and paste it into a chat."));
   }
+}
+
+// ===== SAVED PROGRESS =====
+
+function round1(x) {
+  return Math.round(x * 10) / 10;
+}
+
+function tableSnapshot() {
+  return {
+    settings: table.settings,
+    players: players().map(function (p) { return { name: p.name, stack: p.stack, style: p.style, isHero: p.isHero }; }),
+    button: table.button,
+    level: table.level,
+    handsAtLevel: table.handsAtLevel,
+    handNo: table.handNo,
+    topUps: table.topUps,
+    over: table.over,
+    sessionId: table.sessionId,
+    usedNames: Array.from(table.usedNames)
+  };
+}
+
+function saveTable() {
+  saved.table = tableSnapshot();
+  persist();
+}
+
+function startSessionRecord() {
+  table.sessionId = "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  saved.sessions.unshift({
+    id: table.sessionId,
+    startedAt: Date.now(),
+    lastAt: Date.now(),
+    mode: table.settings.mode,
+    depth: table.settings.mode === "cash" ? table.settings.cashDepth : null,
+    hands: 0, net: 0, vpip: 0, charted: 0, onChart: 0
+  });
+}
+
+function recordHand(h) {
+  saved.recent.unshift(h);
+  var session = saved.sessions.find(function (x) { return x.id === h.sessionId; });
+  if (session) {
+    session.hands += 1;
+    session.net = round1(session.net + h.heroNet / h.bb);
+    if (h.vpip) session.vpip += 1;
+    var verdict = chartVerdict(h);
+    if (verdict) {
+      session.charted += 1;
+      if (verdict !== "miss") session.onChart += 1;
+    }
+    session.lastAt = Date.now();
+  }
+  saved.curve.push(round1(h.heroNet / h.bb));
+  saveTable();
+  renderProgress();
+}
+
+function restoreTable() {
+  var t = saved.table;
+  table.settings = t.settings;
+  $("set-mode").value = t.settings.mode;
+  $("set-depth").value = String(t.settings.cashDepth);
+  $("set-level").value = String(t.settings.levelLength);
+  $("set-speed").value = t.settings.speed;
+  syncSettingsVisibility();
+  table.button = t.button;
+  table.level = t.level;
+  table.handsAtLevel = t.handsAtLevel;
+  table.handNo = t.handNo;
+  table.topUps = t.topUps || 0;
+  table.over = !!t.over;
+  table.sessionId = t.sessionId;
+  table.usedNames = new Set(t.usedNames || []);
+  table.players = t.players.map(function (x, seat) {
+    var p = makePlayer(x.name, x.stack, x.isHero);
+    p.style = x.style;
+    p.pos = positionOf(seat);
+    return p;
+  });
+  table.hand = null;
+  table.sessionHands = saved.recent.filter(function (h) { return h.sessionId === t.sessionId; });
+  table.viewing = table.sessionHands[0] || null;
+}
+
+function renderSaveStatus() {
+  var status = $("save-status");
+  if (saveState.error) {
+    status.textContent = saveState.error;
+    status.className = "save-status warn";
+    return;
+  }
+  status.className = "save-status";
+  status.textContent = saveState.kind === "claude" ? "Saved to your Claude account"
+    : saveState.kind === "local" ? "Saved on this device" : "";
+}
+
+// ===== RENDERING: PROGRESS =====
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function svgEl(tag, attrs) {
+  var node = document.createElementNS(SVG_NS, tag);
+  Object.keys(attrs || {}).forEach(function (k) { node.setAttribute(k, attrs[k]); });
+  return node;
+}
+
+function niceStep(range) {
+  var raw = range / 3;
+  var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  var steps = [1, 2, 2.5, 5, 10];
+  for (var i = 0; i < steps.length; i++) if (steps[i] * mag >= raw) return steps[i] * mag;
+  return 10 * mag;
+}
+
+function fmtSignedBB(v) {
+  var r = round1(v);
+  return (r > 0 ? "+" : r < 0 ? "−" : "±") + Math.abs(r) + "bb";
+}
+
+function renderCurve(host, curve) {
+  host.replaceChildren();
+  if (curve.length < 2) {
+    host.append(el("p", "chart-empty", "Play a few hands to see your results over time."));
+    return;
+  }
+  var cum = [0];
+  curve.forEach(function (v) { cum.push(round1(cum[cum.length - 1] + v)); });
+  var n = cum.length - 1;
+  var W = Math.max(260, Math.round(host.clientWidth || 320));
+  var H = 170;
+  var pad = { l: 46, r: 14, t: 22, b: 22 };
+  var minV = Math.min.apply(null, cum.concat([0]));
+  var maxV = Math.max.apply(null, cum.concat([0]));
+  if (maxV - minV < 4) { maxV += 2; minV -= 2; }
+  var step = niceStep(maxV - minV);
+  var lo = Math.floor(minV / step) * step;
+  var hi = Math.ceil(maxV / step) * step;
+  var plotW = W - pad.l - pad.r;
+  var plotH = H - pad.t - pad.b;
+  function x(i) { return pad.l + (i / n) * plotW; }
+  function y(v) { return pad.t + ((hi - v) / (hi - lo)) * plotH; }
+
+  var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, width: "100%", height: H, role: "img",
+    "aria-label": "Total winnings after each hand, now " + fmtSignedBB(cum[n]) + " over " + n + " hands" });
+
+  for (var t = lo; t <= hi + step / 2; t += step) {
+    var ty = y(t);
+    svg.append(svgEl("line", { x1: pad.l, x2: W - pad.r, y1: ty, y2: ty, class: t === 0 ? "axis-zero" : "grid" }));
+    var label = svgEl("text", { x: pad.l - 6, y: ty + 4, "text-anchor": "end", class: "tick" });
+    label.textContent = (t > 0 ? "+" : t < 0 ? "−" : "") + Math.abs(round1(t));
+    svg.append(label);
+  }
+  var first = svgEl("text", { x: pad.l, y: H - 6, "text-anchor": "start", class: "tick" });
+  first.textContent = "Hand 1";
+  var last = svgEl("text", { x: W - pad.r, y: H - 6, "text-anchor": "end", class: "tick" });
+  last.textContent = "Hand " + n;
+  svg.append(first, last);
+
+  var d = cum.map(function (v, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); }).join(" ");
+  svg.append(svgEl("path", { d: d, class: "curve" }));
+  svg.append(svgEl("circle", { cx: x(n), cy: y(cum[n]), r: 4, class: "curve-end" }));
+  var endLabel = svgEl("text", { x: x(n), y: Math.max(12, y(cum[n]) - 10), "text-anchor": "end", class: "end-label" });
+  endLabel.textContent = fmtSignedBB(cum[n]);
+  svg.append(endLabel);
+
+  var cross = svgEl("line", { y1: pad.t, y2: H - pad.b, class: "crosshair", visibility: "hidden" });
+  var dot = svgEl("circle", { r: 4, class: "curve-end", visibility: "hidden" });
+  var hit = svgEl("rect", { x: pad.l, y: 0, width: plotW, height: H, fill: "transparent" });
+  svg.append(cross, dot, hit);
+  host.append(svg);
+
+  var tip = el("div", "chart-tip");
+  tip.hidden = true;
+  host.append(tip);
+
+  function show(evt) {
+    var rect = svg.getBoundingClientRect();
+    var px = (evt.clientX - rect.left) * (W / rect.width);
+    var i = Math.max(0, Math.min(n, Math.round(((px - pad.l) / plotW) * n)));
+    var cx = x(i), cy = y(cum[i]);
+    cross.setAttribute("x1", cx); cross.setAttribute("x2", cx); cross.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", cx); dot.setAttribute("cy", cy); dot.setAttribute("visibility", "visible");
+    tip.textContent = (i === 0 ? "Start" : "After hand " + i) + ": " + fmtSignedBB(cum[i]) +
+      (i > 0 ? " (this hand " + fmtSignedBB(curve[i - 1]) + ")" : "");
+    tip.hidden = false;
+    var left = (cx / W) * rect.width;
+    tip.style.left = Math.min(Math.max(left, 70), rect.width - 70) + "px";
+    tip.style.top = Math.max(0, (cy / H) * rect.height - 40) + "px";
+  }
+  function hide() {
+    cross.setAttribute("visibility", "hidden");
+    dot.setAttribute("visibility", "hidden");
+    tip.hidden = true;
+  }
+  hit.addEventListener("pointermove", show);
+  hit.addEventListener("pointerdown", show);
+  hit.addEventListener("pointerleave", hide);
+}
+
+function sessionGameLabel(sess) {
+  return sess.mode === "cash" ? "Cash " + sess.depth + "bb" : "Tournament";
+}
+
+let confirmingErase = false;
+
+function renderProgress() {
+  var sessions = saved.sessions;
+  var hands = sessions.reduce(function (s, x) { return s + x.hands; }, 0);
+  var net = sessions.reduce(function (s, x) { return s + x.net; }, 0);
+  var charted = sessions.reduce(function (s, x) { return s + x.charted; }, 0);
+  var onChart = sessions.reduce(function (s, x) { return s + x.onChart; }, 0);
+
+  var stats = $("progress-stats");
+  stats.replaceChildren();
+  [
+    ["Hands", String(hands)],
+    ["Net", hands ? fmtSignedBB(net) : "–"],
+    ["bb/100", hands >= 10 ? fmtSignedBB(net / hands * 100).replace("bb", "") : "–"],
+    ["On chart", charted ? Math.round(onChart / charted * 100) + "%" : "–"]
+  ].forEach(function (t) {
+    var d = el("div");
+    d.append(el("dt", null, t[0]), el("dd", null, t[1]));
+    stats.append(d);
+  });
+
+  renderCurve($("chart-plot"), saved.curve);
+
+  var body = $("sessions-body");
+  body.replaceChildren();
+  var played = sessions.filter(function (x) { return x.hands > 0; }).slice(0, 8);
+  $("sessions-table").hidden = played.length === 0;
+  played.forEach(function (sess) {
+    var tr = el("tr");
+    if (sess.id === table.sessionId) tr.className = "current";
+    var date = new Date(sess.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    var when = el("td", "sess-when");
+    when.append(el("span", null, date + (sess.id === table.sessionId ? " · now" : "")), el("span", "sess-game", sessionGameLabel(sess)));
+    tr.append(
+      when,
+      el("td", "num", String(sess.hands)),
+      el("td", "num " + (sess.net > 0 ? "up" : sess.net < 0 ? "down" : ""), fmtSignedBB(sess.net)),
+      el("td", "num", sess.charted ? Math.round(sess.onChart / sess.charted * 100) + "%" : "–")
+    );
+    body.append(tr);
+  });
+
+  var reset = $("reset-row");
+  reset.replaceChildren();
+  if (!hands) return;
+  if (!confirmingErase) {
+    var ask = el("button", "btn ghost small", "Erase saved progress");
+    ask.type = "button";
+    ask.addEventListener("click", function () { confirmingErase = true; renderProgress(); });
+    reset.append(ask);
+    return;
+  }
+  reset.append(el("span", "erase-q", "Erase all saved hands, sessions and stats? This can't be undone."));
+  var yes = el("button", "btn fold small", "Erase");
+  yes.type = "button";
+  yes.addEventListener("click", function () {
+    confirmingErase = false;
+    saved.sessions = [];
+    saved.curve = [];
+    saved.recent = [];
+    table.sessionHands = [];
+    table.viewing = table.running ? table.hand : null;
+    if (table.settings) startSessionRecord();
+    if (table.settings && !table.running) saveTable(); else persist();
+    renderProgress();
+    renderSession();
+    renderPanel();
+  });
+  var no = el("button", "btn ghost small", "Cancel");
+  no.type = "button";
+  no.addEventListener("click", function () { confirmingErase = false; renderProgress(); });
+  reset.append(yes, no);
 }
 
 // ===== RENDERING: SESSION =====
@@ -1358,7 +1663,10 @@ $("new-session").addEventListener("click", function () {
   newSession();
 });
 $("set-speed").addEventListener("change", function () {
-  if (table.settings) table.settings.speed = $("set-speed").value;
+  if (table.settings) {
+    table.settings.speed = $("set-speed").value;
+    if (!table.running) saveTable();
+  }
 });
 $("review-session").addEventListener("click", function () {
   var hands = table.sessionHands.slice(0, 10).reverse();
@@ -1380,7 +1688,22 @@ document.addEventListener("keydown", function (e) {
   }
 });
 
+table.loading = true;
 syncSettingsVisibility();
 renderPanel();
 renderSession();
 renderControls();
+renderProgress();
+var resizeTimer = null;
+window.addEventListener("resize", function () {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(renderProgress, 150);
+});
+loadProgress().then(function () {
+  table.loading = false;
+  if (saved.table && saved.table.players && saved.table.players.length) restoreTable();
+  renderSaveStatus();
+  renderAll();
+  renderPanel();
+  renderProgress();
+});

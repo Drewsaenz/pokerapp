@@ -21,6 +21,8 @@
   --card: #fbfaf6;
   --card-red: #c8102e;
   --card-black: #15191c;
+  --series: #b8892a;
+  --grid: #213328;
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: dark;
 }
@@ -476,3 +478,53 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
 @media (prefers-reduced-motion: reduce) {
   .btn { transition: none; }
 }
+
+/* Progress */
+
+.panel-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.save-status { font-size: 12px; color: var(--muted); }
+.save-status.warn { color: var(--loss); }
+
+.chart { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.chart figcaption { font-size: 12px; color: var(--muted); }
+.chart-plot { position: relative; min-height: 60px; }
+.chart-plot svg { display: block; max-width: 100%; touch-action: pan-y; }
+.chart-plot .grid { stroke: var(--grid); stroke-width: 1; }
+.chart-plot .axis-zero { stroke: var(--muted); stroke-width: 1; opacity: 0.6; }
+.chart-plot .tick { fill: var(--muted); font-size: 11px; font-family: var(--font); font-variant-numeric: tabular-nums; }
+.chart-plot .curve { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart-plot .curve-end { fill: var(--series); stroke: var(--panel); stroke-width: 2; }
+.chart-plot .end-label { fill: var(--text); font-size: 12px; font-weight: 700; font-family: var(--font); font-variant-numeric: tabular-nums; }
+.chart-plot .crosshair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart-empty { margin: 0; font-size: 13px; color: var(--muted); }
+.chart-tip {
+  position: absolute;
+  transform: translateX(-50%);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.sessions-wrap { overflow-x: auto; }
+.sessions-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.sessions-table th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.sessions-table td { padding: 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.sessions-table .num { text-align: right; }
+.sess-when span { display: block; }
+.sess-when .sess-game { font-size: 11px; color: var(--muted); }
+.sessions-table td.up { color: var(--win); }
+.sessions-table td.down { color: var(--loss); }
+.sessions-table tr.current td { color: var(--brass); }
+.sessions-table tr.current td.up { color: var(--win); }
+.sessions-table tr.current td.down { color: var(--loss); }
+
+.reset-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.reset-row:empty { display: none; }
+.btn.small { padding: 6px 10px; font-size: 12px; }
+.erase-q { font-size: 13px; color: var(--text); flex-basis: 100%; }
