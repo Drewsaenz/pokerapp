@@ -60,6 +60,10 @@ Everything is static, so any static host works. On GitHub Pages: **Settings → 
 
 On a hosted copy the Practice Table can't ask Claude for feedback in the page, since that only works inside Claude. It shows "Copy hand history" instead, for pasting into a chat.
 
+## Updating the hosted site
+
+GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=3`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
+
 ## Files
 
 ```
