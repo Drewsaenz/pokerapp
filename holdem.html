@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Play full Texas Hold'em hands at a 9-handed practice table against bots and get Claude's feedback on each hand." />
+    <title>Hold'em Practice Table</title>
+    <link rel="stylesheet" href="holdem.css" />
+    <link rel="icon" type="image/png" href="casino.png" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Practice Table</h1>
+      <nav class="nav">
+        <a href="simulator.html">Pre-Flop Simulator</a>
+        <a href="index.html">Action Generator</a>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <section class="play">
+        <form class="setup" id="setup" onsubmit="return false">
+          <div class="field">
+            <label for="set-mode">Game</label>
+            <select id="set-mode">
+              <option value="cash">Cash game</option>
+              <option value="tournament">Tournament</option>
+            </select>
+          </div>
+          <div class="field" id="field-depth">
+            <label for="set-depth">Buy-in</label>
+            <select id="set-depth">
+              <option value="100">100bb (deep)</option>
+              <option value="40">40bb (medium)</option>
+              <option value="15">15bb (short)</option>
+            </select>
+          </div>
+          <div class="field" id="field-level">
+            <label for="set-level">Blinds go up every</label>
+            <select id="set-level">
+              <option value="6">6 hands (turbo)</option>
+              <option value="10" selected>10 hands</option>
+              <option value="15">15 hands</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="set-speed">Bot speed</label>
+            <select id="set-speed">
+              <option value="normal">Normal</option>
+              <option value="fast">Fast</option>
+            </select>
+          </div>
+          <button type="button" id="new-session" class="btn ghost">New session</button>
+        </form>
+
+        <div class="table-wrap">
+          <div class="felt" id="felt">
+            <div class="center">
+              <p class="pot" id="pot"></p>
+              <div class="board" id="board"></div>
+              <p class="stage-line" id="stage-line">9-handed · you sit at the bottom</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls" id="controls" aria-live="polite"></div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <header class="panel-head">
+            <h2 id="hand-title"></h2>
+            <p id="hand-sub" class="sub"></p>
+          </header>
+          <ol class="hand-log" id="hand-log"></ol>
+          <div id="hand-result" class="hand-result"></div>
+          <div id="chart-check"></div>
+          <div class="review">
+            <div class="review-actions" id="review-actions"></div>
+            <div class="review-out" id="review-out" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <header class="panel-head">
+            <h2>Session</h2>
+          </header>
+          <dl class="stats" id="stats"></dl>
+          <button type="button" class="btn primary wide" id="review-session" hidden>Review my session</button>
+          <div class="review-out" id="session-review-out" aria-live="polite"></div>
+          <ul class="hand-list" id="hand-list"></ul>
+        </section>
+      </aside>
+    </main>
+
+    <script src="engine.js"></script>
+    <script src="holdem.js"></script>
+  </body>
+</html>

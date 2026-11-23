@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Texas Hold'em pre-flop trainer: get dealt a hand in a random cash or tournament spot and test your decision." />
+    <title>Pre-Flop Simulator</title>
+    <link rel="stylesheet" href="simulator.css" />
+    <link rel="icon" type="image/png" href="casino.png" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Pre-Flop Simulator</h1>
+      <nav class="nav-links"><a class="nav-link" href="holdem.html">Practice Table &rarr;</a> <a class="nav-link" href="index.html">Action Generator &rarr;</a></nav>
+    </header>
+
+    <main class="layout">
+      <aside class="panel filters">
+        <h2>Scenario</h2>
+
+        <label for="filter-stage">Game</label>
+        <select id="filter-stage">
+          <option value="random">Random</option>
+          <option value="cash">Cash game</option>
+          <option value="early">Tournament · early</option>
+          <option value="mid">Tournament · middle</option>
+          <option value="late">Tournament · bubble</option>
+          <option value="final">Final table</option>
+        </select>
+        <p id="stage-note" class="hint"></p>
+
+        <label for="filter-position">Position</label>
+        <select id="filter-position">
+          <option value="random">Random</option>
+          <option value="early">Early (UTG – UTG+2)</option>
+          <option value="middle">Middle (LJ, HJ)</option>
+          <option value="late">Late (CO, BTN)</option>
+          <option value="blinds">Blinds (SB, BB)</option>
+        </select>
+
+        <label for="filter-stack">Stack depth</label>
+        <select id="filter-stack">
+          <option value="random">Realistic for stage</option>
+          <option value="short">Short (8–15bb)</option>
+          <option value="mid">Medium (25–40bb)</option>
+          <option value="deep">Deep (100bb+)</option>
+        </select>
+
+        <label for="filter-spot">Action to you</label>
+        <select id="filter-spot">
+          <option value="random">Random</option>
+          <option value="unopened">Folded to you</option>
+          <option value="facingRaise">Facing a raise</option>
+        </select>
+
+        <label for="filter-hands">Hands dealt</label>
+        <select id="filter-hands">
+          <option value="tough">Mostly tough spots</option>
+          <option value="random">Fully random</option>
+        </select>
+
+        <button id="deal" type="button" class="primary">Deal new hand</button>
+
+        <h2>Session</h2>
+        <dl class="score">
+          <div><dt>Hands</dt><dd id="score-hands">0</dd></div>
+          <div><dt>Correct</dt><dd id="score-correct">0</dd></div>
+          <div><dt>Accuracy</dt><dd id="score-accuracy">–</dd></div>
+          <div><dt>Streak</dt><dd id="score-streak">0</dd></div>
+          <div><dt>Best</dt><dd id="score-best">0</dd></div>
+        </dl>
+        <button id="reset-score" type="button" class="ghost">Reset score</button>
+        <p class="hint">Keys: <kbd>1</kbd>–<kbd>3</kbd> choose, <kbd>Enter</kbd> next hand</p>
+      </aside>
+
+      <section id="stage" class="panel table">
+        <div class="scenario">
+          <p class="eyebrow" id="scenario-title"></p>
+          <p class="meta" id="scenario-meta"></p>
+          <p class="action-line" id="scenario-action"></p>
+        </div>
+
+        <div class="seats" id="seats"></div>
+
+        <div class="felt">
+          <div class="cards" id="cards"></div>
+          <p class="hand-label" id="hand-label"></p>
+        </div>
+
+        <div class="choices" id="choices"></div>
+
+        <div id="result" class="result hidden">
+          <p class="verdict" id="result-verdict"></p>
+          <p class="explanation" id="result-explanation"></p>
+          <button id="next" type="button" class="primary">Next hand</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="engine.js"></script>
+    <script src="simulator.js"></script>
+  </body>
+</html>
