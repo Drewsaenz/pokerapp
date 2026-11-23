@@ -43,6 +43,8 @@ body {
 
 .nav-link:hover { text-decoration: underline; }
 
+.nav-links { display: flex; gap: 16px; }
+
 .layout {
   display: grid;
   grid-template-columns: 260px 1fr;
