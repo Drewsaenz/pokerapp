@@ -1,6 +1,5 @@
 // Practice table: hero plays full hands against 8 bots.
-// Bots play pre-flop from engine.js ranges. Post-flop they never bet or raise:
-// they check, and call a bet only with a pair or better that uses a hole card.
+// Bot decisions live in bots.js; this file runs the table, the hand and the UI.
 
 // ===== TABLE CONFIG =====
 
@@ -281,7 +280,8 @@ function nextBotName() {
 function makePlayer(name, stack, isHero) {
   return {
     name: name, stack: stack, isHero: isHero, cards: [], folded: false, allIn: false,
-    bet: 0, total: 0, startStack: stack, pos: "", lastAction: "", shown: false, won: 0
+    bet: 0, total: 0, startStack: stack, pos: "", lastAction: "", shown: false, won: 0,
+    style: isHero ? null : randomStyle(), range: null, aggr: 0
   };
 }
 
@@ -381,6 +381,7 @@ async function playHand() {
     p.cards = a.rank >= c.rank ? [a, c] : [c, a];
     p.folded = false; p.allIn = false; p.bet = 0; p.total = 0;
     p.startStack = p.stack; p.pos = positionOf(seat); p.lastAction = ""; p.shown = false; p.won = 0;
+    p.range = { pct: 1, shove: false }; p.aggr = 0;
   });
 
   var hero = players()[HERO_SEAT];
@@ -394,7 +395,8 @@ async function playHand() {
     board: [],
     dead: 0,
     actions: [],
-    seats: players().map(function (p) { return { name: p.name, pos: p.pos, stack: p.stack, isHero: p.isHero }; }),
+    seats: players().map(function (p) { return { name: p.name, pos: p.pos, stack: p.stack, isHero: p.isHero, style: p.style }; }),
+    pfAggressor: null,
     heroPos: hero.pos,
     heroCards: hero.cards.slice(),
     heroHand: handNotation(hero.cards),
@@ -524,6 +526,12 @@ function applyDecision(seat, d, ctx) {
   p.lastAction = (kind === "call" ? "Call " : kind === "bet" ? "Bet " : "Raise ") + fmtBB(kind === "call" ? add : to, h.bb) +
     (p.allIn ? " · all-in" : "");
   record({ street: ctx.street, seat: seat, type: kind, to: to, add: add, allIn: p.allIn });
+  if (ctx.street === "preflop") {
+    updateRange(p, kind, ctx);
+    if (kind !== "call") h.pfAggressor = seat;
+  } else if (kind !== "call") {
+    p.aggr += 1;
+  }
 
   if (heroFirst) {
     if (kind === "call") h.heroFirst = "Call";
@@ -659,7 +667,7 @@ function botPreflop(seat, ctx) {
 
   var sc = preflopScenario(seat, ctx);
   if (sc) {
-    var rec = getRecommendation(sc).action;
+    var rec = styledPreflop(seat, ctx, sc);
     if (rec === "All-In") return { type: "raise", to: maxTo };
     if (rec === "Call") return { type: "call" };
     if (rec === "Raise") return sizedRaise(seat, ctx, bb * ((sc.stack === "short" ? 2.1 : 2.5) + limperCount()));
@@ -677,21 +685,9 @@ function botPreflop(seat, ctx) {
   // 3-bet pots, all-ins and big raises: continue on price, jam the very top
   if (pPlay <= 0.025) return { type: "raise", to: maxTo };
   var required = ctx.toCall / (ctx.pot + ctx.toCall);
-  var continuePct = clamp((0.55 - required) * 0.45, 0.02, 0.3);
+  var continuePct = clamp((0.55 - required) * 0.45 * styleOf(p).call, 0.02, 0.35);
   if (pShove <= continuePct) return { type: "call" };
   return ctx.toCall === 0 ? { type: "check" } : { type: "fold" };
-}
-
-function botPostflop(seat, ctx) {
-  if (ctx.toCall === 0) return { type: "check" };
-  var p = players()[seat];
-  var board = table.hand.board;
-  var mine = evaluateHand(p.cards.concat(board));
-  var boardOnly = evaluateHand(board);
-  var potBeforeBet = ctx.pot - ctx.currentBet;
-  var needed = ctx.toCall >= 0.9 * potBeforeBet ? 2 : 1;
-  if (mine.score[0] >= needed && mine.score[0] > boardOnly.score[0]) return { type: "call" };
-  return { type: "fold" };
 }
 
 // ===== HERO =====
@@ -806,7 +802,8 @@ function renderTable() {
     }
     var plate = el("div", "seat-plate");
     var top = el("div", "seat-top");
-    top.append(el("span", "seat-name", p.name), el("span", "seat-pos", p.pos));
+    top.append(el("span", "seat-name", p.name), el("span", "seat-pos", p.pos + (p.style ? " · " + styleOf(p).label : "")));
+    if (p.style) node.title = p.name + " plays " + styleOf(p).name;
     var stack = el("div", "seat-stack", p.allIn && !h.done ? "All-in" : fmtBB(p.stack, h.bb));
     stack.title = fmtChips(p.stack);
     plate.append(top, stack);
@@ -1068,7 +1065,7 @@ function historyText(h) {
     fmtBB(h.seats[HERO_SEAT].stack, bb) + ".");
   var stacks = PREFLOP_ORDER.map(function (pos) {
     var s = h.seats.find(function (x) { return x.pos === pos; });
-    return pos + (s.isHero ? " (Hero)" : "") + " " + fmtBB(s.stack, bb);
+    return pos + (s.isHero ? " (Hero)" : " (" + BOT_STYLES[s.style].name + ")") + " " + fmtBB(s.stack, bb);
   });
   lines.push("Stacks: " + stacks.join(", ") + ".");
 
@@ -1107,15 +1104,16 @@ function historyText(h) {
 // ===== CLAUDE REVIEW =====
 
 const BOT_RULES =
-  "The opponents are simple bots. Pre-flop they follow standard chart ranges. Post-flop they never bet or raise: " +
-  "they check, and when facing a bet they call with a pair or better that uses one of their hole cards " +
-  "(two pair or better against a pot-sized bet) and fold everything else.";
+  "The opponents are bots, each with a labelled style: tight-aggressive, loose-aggressive, tight-passive or calling station. " +
+  "Pre-flop they play chart ranges widened or narrowed by style. Post-flop they estimate each opponent's range from the " +
+  "actions in the hand, simulate equity against it, and then value-bet, slow-play, c-bet, semi-bluff, bluff, raise, call " +
+  "or fold with frequencies set by their style. They never see Hero's cards.";
 
 function handPrompt(h) {
   return [
     "You are a poker coach reviewing one hand from a no-limit Texas Hold'em practice app. The player is \"Hero\".",
     BOT_RULES,
-    "Judge Hero's decisions as they would play against real opponents first, then add a short note if the bots' fixed behavior changes the best play.",
+    "Judge Hero's decisions as you would against real opponents, and note where the opponent's labelled style should change Hero's play (for example, value-bet thinner against a calling station, fold more to a tight-passive player's raise).",
     "",
     historyText(h),
     "",
@@ -1323,7 +1321,7 @@ function renderSession() {
 
   var list = $("hand-list");
   list.replaceChildren();
-  hands.forEach(function (h) {
+  hands.slice(0, 50).forEach(function (h) {
     var li = el("li");
     var b = el("button", "hand-row" + (h === table.viewing ? " current" : ""));
     b.type = "button";

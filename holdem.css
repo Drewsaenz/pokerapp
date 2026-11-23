@@ -243,9 +243,9 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
   text-align: center;
 }
 
-.seat-top { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }
-.seat-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.seat-pos { font-size: 10px; color: var(--muted); letter-spacing: 0.5px; }
+.seat-top { display: flex; flex-direction: column; align-items: center; }
+.seat-name { font-size: 12px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat-pos { font-size: 10px; color: var(--muted); letter-spacing: 0.3px; white-space: nowrap; }
 .seat-stack { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .seat-act {
@@ -455,8 +455,7 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
   .felt { aspect-ratio: 3 / 4; border-radius: 46% / 50%; }
   .center { width: 70%; }
   .seat { width: 70px; }
-  .seat-top { flex-direction: column; align-items: center; gap: 0; }
-  .seat-name { font-size: 10px; max-width: 100%; }
+  .seat-name { font-size: 10px; }
   .seat-pos { font-size: 9px; }
   .seat-stack { font-size: 11px; }
   .seat-act { font-size: 10px; }

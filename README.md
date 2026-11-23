@@ -45,11 +45,14 @@ The thresholds are approximations of common charts, not solver output. All the n
 A 9-handed table where you play full hands against eight bots, then get feedback on them.
 
 - **Games**: cash (100bb, 40bb or 15bb buy-in) or a tournament whose blinds rise every 6, 10 or 15 hands, moving through the early, middle (big-blind ante), bubble and final-table stages. Busted bots are replaced so the table stays full.
-- **Bots** play pre-flop from the same engine as the simulator. Post-flop they never bet or raise: they check, and call a bet only with a pair or better that uses a hole card. That makes post-flop play unrealistic on purpose — this is the lean first version.
+- **Bots** each have a style shown on their seat: TAG (tight-aggressive), LAG (loose-aggressive), Nit (tight-passive) or Station (calling station). Pre-flop they play the simulator's chart ranges, widened or narrowed by style. Post-flop (`bots.js`) they:
+  - estimate each opponent's range from that opponent's actions in the hand (an open, a 3-bet, a call, bets on earlier streets),
+  - simulate a few hundred run-outs against those ranges to get their equity, without ever seeing your cards,
+  - then value-bet, slow-play, c-bet, semi-bluff, bluff, raise, call or fold, at frequencies set by their style, sizing bets to the board.
 - **Chart check**: after each hand, your first pre-flop decision is compared with the chart.
 - **Claude feedback**: opened as a Claude artifact, the page can send a hand (or your last 10) to Claude and show a review in the page. Anywhere else, use "Copy hand history" and paste it into a chat.
 
-Hands are evaluated in `holdem.js` (best five of seven, side pots, split pots). `engine.js` holds the shared pre-flop ranges.
+Hands are evaluated in `holdem.js` (best five of seven, side pots, split pots). `engine.js` holds the shared pre-flop ranges and `bots.js` the bots' hand reading and decisions.
 
 ## Hosting
 
@@ -63,6 +66,7 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 index.html / app.js / style.css          Action Generator
 simulator.html / simulator.js / simulator.css   Simulator
 holdem.html / holdem.js / holdem.css      Practice Table
+bots.js                                   Practice Table bot styles, hand reading and post-flop decisions
 engine.js                                 Pre-flop ranges shared by Simulator and Practice Table
 casino.png                                Favicon
 poker-5.jpg                               Background for the Action Generator
