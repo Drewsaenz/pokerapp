@@ -549,6 +549,9 @@ function applyDecision(seat, d, ctx) {
 function settle() {
   var h = table.hand;
   var ps = players();
+  // The cards that would have been dealt next, in order, and everyone's hole cards
+  h.runout = h.deck.slice(h.deck.length - (5 - h.board.length)).reverse();
+  h.holeCards = ps.map(function (p) { return p.cards.slice(); });
   var live = [];
   ps.forEach(function (p, seat) { if (!p.folded) live.push(seat); });
 
@@ -871,6 +874,8 @@ function renderTable() {
 
   var winnerSeats = new Set();
   if (h && h.done) players().forEach(function (p, s) { if (p.won > 0) winnerSeats.add(s); });
+  var revealed = h && h.revealed && canShowRest(h) ? restOfHand(h) : null;
+  var revealSeats = new Set(revealed ? revealed.hands.map(function (x) { return x.seat; }) : []);
 
   players().forEach(function (p, seat) {
     var pt = seatPoint(seat, 44, 41);
@@ -883,7 +888,9 @@ function renderTable() {
     node.style.top = pt.y + "%";
 
     var cards = el("div", "seat-cards");
-    if (!p.folded || p.isHero) {
+    if (h && h.revealed && h.holeCards && revealSeats.has(seat)) {
+      h.holeCards[seat].forEach(function (c) { cards.append(cardEl(c, p.isHero ? "md" : "sm")); });
+    } else if (!p.folded || p.isHero) {
       p.cards.forEach(function (c) {
         cards.append(p.isHero || p.shown ? cardEl(c, p.isHero ? "md" : "sm") : cardBack("sm"));
       });
@@ -928,7 +935,13 @@ function renderTable() {
   var board = $("board");
   board.replaceChildren();
   for (var i = 0; i < 5; i++) {
-    board.append(h.board[i] ? cardEl(h.board[i], "lg") : el("div", "pcard slot lg"));
+    if (h.board[i]) board.append(cardEl(h.board[i], "lg"));
+    else if (revealed) {
+      var ghost = cardEl(revealed.board[i], "lg");
+      ghost.classList.add("ghost");
+      ghost.title = "Would have come next";
+      board.append(ghost);
+    } else board.append(el("div", "pcard slot lg"));
   }
   var stageLabel = GAME_STAGES[h.stage].label;
   $("stage-line").textContent = stageLabel + " · " + fmtChips(h.sb) + "/" + fmtChips(h.bb) + (h.ante ? " · ante " + fmtChips(h.ante) : "") +
@@ -1124,7 +1137,97 @@ function renderPanel() {
     res.append(net);
     renderChartCheck(h);
   }
+  renderRest(h);
   renderReview();
+}
+
+// ===== REST OF THE HAND (hindsight) =====
+
+function canShowRest(h) {
+  return !!(h && h.done && !h.showdown.length && h.runout && h.holeCards);
+}
+
+// Who would have reached showdown if the hand had been checked down from where it stopped
+function restOfHand(h) {
+  var board = h.board.concat(h.runout).slice(0, 5);
+  var foldedAt = {};
+  h.actions.forEach(function (a, i) { if (a.type === "fold") foldedAt[a.seat] = i; });
+  var heroFold = foldedAt[HERO_SEAT];
+  var contenders = [];
+  if (heroFold !== undefined) {
+    h.seats.forEach(function (x, seat) {
+      if (foldedAt[seat] === undefined || foldedAt[seat] >= heroFold) contenders.push(seat);
+    });
+  } else {
+    var lastFold = -1, lastSeat = null;
+    Object.keys(foldedAt).forEach(function (seat) {
+      if (foldedAt[seat] > lastFold) { lastFold = foldedAt[seat]; lastSeat = Number(seat); }
+    });
+    h.seats.forEach(function (x, seat) { if (foldedAt[seat] === undefined) contenders.push(seat); });
+    if (lastSeat !== null) contenders.push(lastSeat);
+  }
+  var hands = contenders.map(function (seat) {
+    var made = evaluateHand(h.holeCards[seat].concat(board));
+    return { seat: seat, cards: h.holeCards[seat], name: made.name, score: made.score };
+  });
+  var best = hands.reduce(function (b, x) { return !b || compareScore(x.score, b) > 0 ? x.score : b; }, null);
+  hands.forEach(function (x) { x.wins = compareScore(x.score, best) === 0; });
+  var splits = hands.filter(function (x) { return x.wins; }).length > 1;
+  var others = h.seats.map(function (x, seat) { return seat; })
+    .filter(function (seat) { return contenders.indexOf(seat) === -1; });
+  return { board: board, newCards: h.runout.length, hands: hands, splits: splits, others: others };
+}
+
+function seatLabel(h, seat) {
+  return seat === HERO_SEAT ? "You (" + h.seats[seat].pos + ")" : h.seats[seat].name + " (" + h.seats[seat].pos + ")";
+}
+
+function renderRest(h) {
+  var box = $("rest-of-hand");
+  box.replaceChildren();
+  if (!canShowRest(h)) return;
+  var toggle = el("button", "btn ghost", h.revealed ? "Hide the rest of the hand" :
+    (h.runout.length ? "See the rest of the hand" : "See what everyone had"));
+  toggle.type = "button";
+  toggle.setAttribute("aria-expanded", h.revealed ? "true" : "false");
+  toggle.addEventListener("click", function () {
+    h.revealed = !h.revealed;
+    renderRest(h);
+    if (h === table.hand) renderTable();
+  });
+  box.append(toggle);
+  if (!h.revealed) return;
+
+  var rest = restOfHand(h);
+  var panel = el("div", "rest-panel");
+  if (rest.newCards) {
+    var row = el("div", "rest-board");
+    row.append(el("span", "rest-label", "Run-out"));
+    var cards = el("div", "rest-cards");
+    rest.board.forEach(function (c, i) {
+      var node = cardEl(c, "sm");
+      if (i >= rest.board.length - rest.newCards) node.classList.add("new");
+      cards.append(node);
+    });
+    row.append(cards);
+    panel.append(row);
+  }
+  var list = el("ul", "rest-hands");
+  rest.hands.forEach(function (x) {
+    var li = el("li", x.wins ? "wins" : "");
+    li.append(el("span", "rest-who", seatLabel(h, x.seat)), el("span", "rest-hole", cardsText(x.cards)),
+      el("span", "rest-made", x.name + (x.wins ? (rest.splits ? " · would split" : " · would win") : "")));
+    list.append(li);
+  });
+  panel.append(list);
+  if (rest.others.length) {
+    panel.append(el("p", "rest-folded", "Folded earlier: " + rest.others.map(function (seat) {
+      return seatLabel(h, seat) + " " + cardsText(h.holeCards[seat]);
+    }).join(" · ")));
+  }
+  panel.append(el("p", "fb-note", "Hindsight only: this assumes the next cards came off as dealt and nobody bet again. " +
+    "Judge your decision by what you knew at the time."));
+  box.append(panel);
 }
 
 const AGGRESSIVE = ["Raise", "3-Bet", "4-Bet", "5-Bet", "All-In"];

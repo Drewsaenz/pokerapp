@@ -529,3 +529,21 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
 .reset-row:empty { display: none; }
 .btn.small { padding: 6px 10px; font-size: 12px; }
 .erase-q { font-size: 13px; color: var(--text); flex-basis: 100%; }
+
+/* Rest of the hand */
+
+.rest { display: flex; flex-direction: column; gap: 10px; }
+.rest:empty { display: none; }
+.rest .btn { align-self: flex-start; }
+.rest-panel { display: flex; flex-direction: column; gap: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.rest-board { display: flex; align-items: center; gap: 10px; }
+.rest-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); font-weight: 700; }
+.rest-cards { display: flex; gap: 4px; }
+.pcard.new { box-shadow: 0 0 0 2px var(--brass); }
+.pcard.ghost { opacity: 0.55; box-shadow: 0 0 0 2px var(--brass); }
+.rest-hands { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.rest-hands li { display: flex; flex-wrap: wrap; gap: 2px 8px; color: #c8d6cc; }
+.rest-hands li.wins { color: var(--text); }
+.rest-hands li.wins .rest-made { color: var(--win); font-weight: 600; }
+.rest-who { font-weight: 600; color: var(--text); }
+.rest-folded { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
