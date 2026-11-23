@@ -364,7 +364,8 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
 .net.up { color: var(--win); }
 .net.down { color: var(--loss); }
 
-.chart-line, .chart-note { margin: 0; font-size: 13px; color: #c8d6cc; }
+.chart-line, .chart-note { margin: 0; font-size: 13px; color: #c8d6cc; line-height: 1.5; }
+.chart-spot { font-weight: 600; color: var(--text); }
 
 .chip {
   display: inline-block;

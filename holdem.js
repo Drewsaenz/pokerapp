@@ -403,8 +403,8 @@ async function playHand() {
     heroPos: hero.pos,
     heroCards: hero.cards.slice(),
     heroHand: handNotation(hero.cards),
-    heroChart: null,
-    heroFirst: null,
+    checks: [],
+    pendingCheck: null,
     vpip: false,
     results: [],
     showdown: [],
@@ -498,7 +498,7 @@ async function bettingRound(street) {
 function applyDecision(seat, d, ctx) {
   var p = players()[seat];
   var h = table.hand;
-  var heroFirst = p.isHero && ctx.street === "preflop" && h.heroFirst === null;
+  var heroPre = p.isHero && ctx.street === "preflop";
   var type = d.type;
   if (type === "check" && ctx.toCall > 0) type = "call";
   if (type === "call" && ctx.toCall === 0) type = "check";
@@ -507,13 +507,13 @@ function applyDecision(seat, d, ctx) {
     p.folded = true;
     p.lastAction = "Fold";
     record({ street: ctx.street, seat: seat, type: "fold" });
-    if (heroFirst) h.heroFirst = "Fold";
+    if (heroPre) logHeroCheck("Fold");
     return false;
   }
   if (type === "check") {
     p.lastAction = "Check";
     record({ street: ctx.street, seat: seat, type: "check" });
-    if (heroFirst) h.heroFirst = "Check";
+    if (heroPre) logHeroCheck("Check");
     return false;
   }
 
@@ -539,11 +539,9 @@ function applyDecision(seat, d, ctx) {
     p.aggr += 1;
   }
 
-  if (heroFirst) {
-    if (kind === "call") h.heroFirst = "Call";
-    else if (p.allIn && (h.heroChart && h.heroChart.stack === "short")) h.heroFirst = "All-In";
-    else h.heroFirst = ctx.raises === 0 ? "Raise" : "3-Bet";
-    h.heroFirstAllIn = p.allIn;
+  if (heroPre) {
+    var label = kind === "call" ? "Call" : p.allIn ? "All-In" : (["Raise", "3-Bet", "4-Bet"][ctx.raises] || "5-Bet");
+    logHeroCheck(label);
   }
   return kind !== "call";
 }
@@ -703,24 +701,103 @@ function botPreflop(seat, ctx) {
 
 function heroAct(ctx) {
   var h = table.hand;
-  if (ctx.street === "preflop" && h.heroChart === null) {
-    var sc = preflopScenario(HERO_SEAT, ctx);
-    if (sc) {
-      var rec = getRecommendation(sc);
-      h.heroChart = {
-        action: rec.action,
-        explanation: rec.explanation,
-        stack: sc.stack,
-        limpers: ctx.raises === 0 ? limperCount() : 0
-      };
-    } else {
-      h.heroChart = { action: null, stack: null, reason: ctx.raises === 0 ? "a limped pot in the big blind" : "a re-raised or all-in pot" };
-    }
-  }
+  if (ctx.street === "preflop") h.pendingCheck = heroChartFor(ctx);
   return new Promise(function (resolve) {
     pendingHero = { ctx: ctx, resolve: resolve };
     renderControls();
   });
+}
+
+function logHeroCheck(you) {
+  var h = table.hand;
+  var c = h.pendingCheck;
+  h.pendingCheck = null;
+  if (!c) return;
+  h.checks.push({ spot: c.spot, chart: c.action, you: you, explanation: c.explanation, limpers: c.limpers || 0 });
+}
+
+function heroActsAfter(seat) {
+  var order = POSTFLOP_ORDER;
+  return order.indexOf(players()[HERO_SEAT].pos) > order.indexOf(players()[seat].pos);
+}
+
+// The chart's answer for any hero pre-flop decision
+function heroChartFor(ctx) {
+  var p = players()[HERO_SEAT];
+  var h = table.hand;
+  var sc = preflopScenario(HERO_SEAT, ctx);
+  if (sc) {
+    var rec = getRecommendation(sc);
+    return {
+      spot: sc.spot === "unopened" ? "Folded to you" : "Facing a raise",
+      action: rec.action,
+      explanation: rec.explanation,
+      limpers: ctx.raises === 0 ? limperCount() : 0
+    };
+  }
+  var hand = handNotation(p.cards);
+  var pPlay = handPercentile(hand, false);
+  var pShove = handPercentile(hand, true);
+  var tight = h.stage === "late" || h.stage === "final" ? 0.8 : 1;
+  var stageNote = tight < 1 ? " " + STAGE_NOTES[h.stage] : "";
+
+  if (ctx.raises === 0 && p.pos === "BB") {
+    return {
+      spot: "Limpers, you're in the big blind",
+      action: pPlay <= 0.1 ? "Raise" : "Check",
+      explanation: "Only limpers in front of you. Raise your top 10% or so to punish the limps, and check everything else to see a free flop. " +
+        hand + " is in the top " + pct(pPlay) + "."
+    };
+  }
+
+  var bigBet = ctx.raiserAllIn || ctx.toCall >= 0.35 * (p.stack + p.bet);
+  if (bigBet) {
+    var required = ctx.toCall / (ctx.pot + ctx.toCall);
+    var callPct = clamp((0.55 - required) * 0.45 * tight, 0.02, 0.3);
+    var go = pShove <= callPct;
+    return {
+      spot: ctx.raiserAllIn ? "Facing an all-in" : "Facing a raise that commits your stack",
+      action: go ? (ctx.raiserAllIn ? "Call" : "All-In") : "Fold",
+      explanation: "It costs " + fmtBB(Math.min(ctx.toCall, p.stack), h.bb) + " to continue into a pot of " + fmtBB(ctx.pot, h.bb) +
+        ", so you need about " + pct(required) + " equity. Against a range this strong that means roughly the top " + pct(callPct) +
+        " of hands by all-in equity; " + hand + " is in the top " + pct(pShove) + "." + stageNote
+    };
+  }
+
+  var heroActions = h.actions.filter(function (a) { return a.isHero && a.street === "preflop" && a.type !== "post"; });
+  var heroOpened = heroActions.some(function (a) { return a.type === "raise"; });
+  if (ctx.raises >= 3) {
+    var line4 = 0.024 * tight;
+    return {
+      spot: "Facing a 4-bet",
+      action: pPlay <= line4 ? "All-In" : "Fold",
+      explanation: "After you 3-bet and get 4-bet, continue only with the very top, about the top " + pct(line4) +
+        " (QQ+, AK suited). " + hand + " is in the top " + pct(pPlay) + "." + stageNote
+    };
+  }
+
+  if (ctx.raises === 2) {
+    var cold = !heroOpened;
+    var effBB = Math.round(effectiveStack(HERO_SEAT) / h.bb);
+    var short = effBB <= 40;
+    var ip = heroActsAfter(ctx.lastRaiser);
+    var fourLine = (cold ? 0.03 : 0.035) * tight;
+    var callBand = short ? 0 : (cold ? (ip ? 0.012 : 0) : (ip ? 0.07 : 0.04) * tight);
+    var action = pPlay <= fourLine ? (short ? "All-In" : "4-Bet") : (pPlay <= fourLine + callBand ? "Call" : "Fold");
+    var who = players()[ctx.lastRaiser].pos;
+    return {
+      spot: heroOpened ? "Facing a 3-bet after you opened" : (heroActions.length ? "Facing a 3-bet after you called" : "Facing a raise and a 3-bet"),
+      action: action,
+      explanation: (cold
+        ? "Someone opened and the " + who + " 3-bet before it reached you, so both ranges are strong. 4-bet about the top " + pct(fourLine) +
+          (callBand ? ", call the next " + pct(callBand) + " in position" : "") + ", and fold the rest."
+        : "The " + who + " 3-bet your open. 4-bet about the top " + pct(fourLine) +
+          (callBand ? ", call the next " + pct(callBand) + (ip ? " since you'll have position" : " out of position") : (short ? "; at " + effBB + "bb there's no room to call and play post-flop" : "")) +
+          ", and fold the rest.") +
+        " " + hand + " is in the top " + pct(pPlay) + "." + stageNote
+    };
+  }
+  return null;
 }
 
 function heroDecide(decision) {
@@ -1050,32 +1127,37 @@ function renderPanel() {
   renderReview();
 }
 
-function chartVerdict(h) {
-  var c = h.heroChart;
-  if (!c || !c.action || !h.heroFirst) return null;
-  var you = h.heroFirst;
-  var chart = c.action;
+const AGGRESSIVE = ["Raise", "3-Bet", "4-Bet", "5-Bet", "All-In"];
+
+function checkVerdict(you, chart) {
   if (you === chart) return "match";
-  var aggressive = ["Raise", "3-Bet", "All-In"];
-  if (aggressive.indexOf(you) !== -1 && aggressive.indexOf(chart) !== -1) return "close";
   if (you === "Check" && chart === "Fold") return "match";
+  if (AGGRESSIVE.indexOf(you) !== -1 && AGGRESSIVE.indexOf(chart) !== -1) return "close";
+  if ((you === "Call" && chart === "All-In") || (you === "All-In" && chart === "Call")) return "close";
   return "miss";
+}
+
+// The worst verdict across the hand's pre-flop decisions, or null if none were graded
+function chartVerdict(h) {
+  var list = h.checks || (h.heroChart && h.heroChart.action && h.heroFirst ? [{ chart: h.heroChart.action, you: h.heroFirst }] : []);
+  if (!list.length) return null;
+  var rank = { match: 0, close: 1, miss: 2 };
+  return list.map(function (c) { return checkVerdict(c.you, c.chart); })
+    .reduce(function (worst, v) { return rank[v] > rank[worst] ? v : worst; }, "match");
 }
 
 function renderChartCheck(h) {
   var box = $("chart-check");
-  var c = h.heroChart;
-  if (!c) return;
-  if (!c.action) {
-    box.append(el("p", "chart-note", "Chart check: not covered (" + c.reason + ")."));
-    return;
-  }
-  var verdict = chartVerdict(h);
-  var chip = el("span", "chip " + verdict, verdict === "match" ? "Matches chart" : verdict === "close" ? "Close to chart" : "Off chart");
-  var line = el("p", "chart-line");
-  line.append(chip, document.createTextNode(" You: " + h.heroFirst + " · Chart: " + c.action +
-    (c.limpers ? " (chart assumes no limpers; there were " + c.limpers + ")" : "")));
-  box.append(line);
+  var list = h.checks || (h.heroChart && h.heroChart.action ? [{ spot: "First decision", chart: h.heroChart.action, you: h.heroFirst }] : []);
+  list.forEach(function (c) {
+    if (!c.you) return;
+    var verdict = checkVerdict(c.you, c.chart);
+    var chip = el("span", "chip " + verdict, verdict === "match" ? "Matches chart" : verdict === "close" ? "Close to chart" : "Off chart");
+    var line = el("p", "chart-line");
+    line.append(chip, el("span", "chart-spot", c.spot + ": "), document.createTextNode("you " + c.you.toLowerCase() + ", chart says " +
+      c.chart.toLowerCase() + (c.limpers ? " (chart assumes no limpers; there were " + c.limpers + ")" : "") + "."));
+    box.append(line);
+  });
 }
 
 // ===== HAND HISTORY TEXT (for Claude) =====
@@ -1122,7 +1204,10 @@ function historyText(h) {
   lines.push("Result: " + h.results.map(function (r) {
     return h.seats.reduce(function (text, s) { return s.isHero ? text.split(s.name + " ").join("Hero ") : text.split(s.name + " ").join(s.pos + " "); }, r);
   }).join(" ") + " Hero net " + signedBB(h.heroNet, bb) + ".");
-  if (h.heroChart && h.heroChart.action) {
+  (h.checks || []).forEach(function (c) {
+    lines.push("Pre-flop chart reference (" + c.spot + "): Hero chose " + c.you + ", chart says " + c.chart + ". " + c.explanation);
+  });
+  if (!h.checks && h.heroChart && h.heroChart.action) {
     lines.push("Pre-flop chart reference for Hero's first decision: " + h.heroChart.action + ". " + h.heroChart.explanation);
   }
   return lines.join("\n");
