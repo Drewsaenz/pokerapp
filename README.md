@@ -51,6 +51,12 @@ A 9-handed table where you play full hands against eight bots, then get feedback
 
 Hands are evaluated in `holdem.js` (best five of seven, side pots, split pots). `engine.js` holds the shared pre-flop ranges.
 
+## Hosting
+
+Everything is static, so any static host works. On GitHub Pages: **Settings → Pages → Deploy from a branch → `main` / `(root)`**. The site then lives at `https://<user>.github.io/pokerapp/`, with the Action Generator at the root and `simulator.html` and `holdem.html` beside it. `.nojekyll` tells Pages to serve the files as-is.
+
+On a hosted copy the Practice Table can't ask Claude for feedback in the page, since that only works inside Claude. It shows "Copy hand history" instead, for pasting into a chat.
+
 ## Files
 
 ```
