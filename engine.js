@@ -177,6 +177,11 @@ function dealHoleCards() {
   return [first, second];
 }
 
+// How a rank is printed on a card face: a real deck says 10, shorthand like QTs keeps T
+function faceRank(rank) {
+  return RANKS[rank] === "T" ? "10" : RANKS[rank];
+}
+
 // Convert two cards into chart notation like "AKs", "T9o", or "77"
 function handNotation(cards) {
   var high = RANKS[cards[0].rank];

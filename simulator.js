@@ -24,11 +24,11 @@ function renderCard(card) {
   var suit = SUITS[card.suit];
   var el = document.createElement("div");
   el.className = "card " + suit.color;
-  el.setAttribute("aria-label", RANKS[card.rank] + " of " + suit.name);
+  el.setAttribute("aria-label", faceRank(card.rank) + " of " + suit.name);
   el.innerHTML =
-    '<span class="corner top">' + RANKS[card.rank] + "<br>" + suit.sym + "</span>" +
+    '<span class="corner top">' + faceRank(card.rank) + "<br>" + suit.sym + "</span>" +
     '<span class="pip">' + suit.sym + "</span>" +
-    '<span class="corner bottom">' + RANKS[card.rank] + "<br>" + suit.sym + "</span>";
+    '<span class="corner bottom">' + faceRank(card.rank) + "<br>" + suit.sym + "</span>";
   return el;
 }
 

@@ -81,7 +81,7 @@ function signedBB(chips, bb) {
 
 function cardText(card, ascii) {
   var suit = ascii ? ["s", "h", "d", "c"][card.suit] : SUITS[card.suit].sym;
-  return RANKS[card.rank] + suit;
+  return (ascii ? RANKS[card.rank] : faceRank(card.rank)) + suit;
 }
 
 function cardsText(cards, ascii) {
@@ -905,8 +905,8 @@ function seatPoint(seat, rx, ry) {
 
 function cardEl(card, size) {
   var node = el("div", "pcard " + (size || "") + " " + SUITS[card.suit].color);
-  node.setAttribute("aria-label", RANKS[card.rank] + " of " + SUITS[card.suit].name);
-  node.append(el("span", "pcard-rank", RANKS[card.rank]), el("span", "pcard-suit", SUITS[card.suit].sym));
+  node.setAttribute("aria-label", faceRank(card.rank) + " of " + SUITS[card.suit].name);
+  node.append(el("span", "pcard-rank", faceRank(card.rank)), el("span", "pcard-suit", SUITS[card.suit].sym));
   return node;
 }
 
