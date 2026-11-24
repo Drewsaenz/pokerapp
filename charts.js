@@ -202,8 +202,159 @@ function renderExplorer() {
   $(id).addEventListener("change", renderExplorer);
 });
 
+// ===== PLAYER TYPES =====
+
+const PLAYER_TYPES = [
+  {
+    key: "TAG", name: "Tight-aggressive", short: "TAG", tight: true, aggressive: true,
+    vpip: "18–25%", pfr: "15–21%",
+    tell: "Raises or folds, rarely limps or just calls.",
+    plan: "Respect their big bets; steal from them less.",
+    what: "The solid regular. Plays a disciplined range and plays it hard. This is the style the charts teach.",
+    plays: [
+      "Opens and 3-bets close to the charts, rarely limps.",
+      "Continuation-bets most flops, keeps betting good hands for value.",
+      "Bluffs in sensible spots, usually with draws or blockers, not at random."
+    ],
+    spot: ["VPIP and PFR close together.", "Shows down strong, reasonable hands.", "Bet sizes make sense for the board."],
+    beat: [
+      "Fold more to their 3-bets and to big turn and river bets. They're usually value.",
+      "Float or raise their flop c-bets in position on low, connected boards that miss their range.",
+      "Don't try to bluff-catch thin on the river. Save your chips for clearer spots.",
+      "Play your strongest hands fast: they'll often pay you with top pair and overpairs."
+    ]
+  },
+  {
+    key: "LAG", name: "Loose-aggressive", short: "LAG", tight: false, aggressive: true,
+    vpip: "28–40%", pfr: "22–32%",
+    tell: "3-bets and squeezes often; fires big on scary boards.",
+    plan: "Call down lighter; let them bluff into you.",
+    what: "Plays lots of hands and keeps the pressure on. Dangerous when good, but bluffs much more than a TAG.",
+    plays: [
+      "Opens wide and 3-bets light, especially in late position and the blinds.",
+      "Barrels turns and rivers with draws and air.",
+      "Uses big bets to push you off medium-strength hands."
+    ],
+    spot: ["High VPIP and high PFR.", "Shows down weak hands or busted draws after big bets.", "Frequent squeezes after a raise and a call."],
+    beat: [
+      "Tighten up when they're behind you: marginal calls get squeezed (your Q9s hand).",
+      "Check-call with medium hands like top pair or a good middle pair instead of betting. Let them bluff.",
+      "4-bet for value a bit wider against their 3-bets (QQ+, AK, sometimes JJ, AQs).",
+      "Avoid fancy bluffs. They call and re-raise too often for bluffs to work."
+    ]
+  },
+  {
+    key: "NIT", name: "Tight-passive (Nit)", short: "Nit", tight: true, aggressive: false,
+    vpip: "8–14%", pfr: "5–10%",
+    tell: "Folds almost every hand; a raise from them means a monster.",
+    plan: "Steal their blinds; fold when they wake up.",
+    what: "Waits for premium hands and plays them cautiously. Easy to read, hard to win big pots from.",
+    plays: [
+      "Plays only strong hands and rarely bluffs.",
+      "Calls more than raises, and slow-plays big hands sometimes.",
+      "Gives up when they miss, folding to a single bet."
+    ],
+    spot: ["Very low VPIP.", "Long stretches of folding.", "Every showdown is a strong hand."],
+    beat: [
+      "Raise their blinds often and c-bet when they call: they fold too much.",
+      "Fold to their raises and big bets unless you're very strong.",
+      "Don't expect big payoffs. Value-bet only your best hands, and smaller.",
+      "When they suddenly come alive, believe them."
+    ]
+  },
+  {
+    key: "CALL", name: "Loose-passive (Calling station)", short: "Station", tight: false, aggressive: false,
+    vpip: "35–60%", pfr: "3–10%",
+    tell: "Limps and calls a lot; rarely raises; chases any draw.",
+    plan: "Never bluff; value-bet thinner and bigger.",
+    what: "Plays lots of hands and hates folding. The most profitable opponent at the table if you don't bluff.",
+    plays: [
+      "Limps and calls raises with weak hands.",
+      "Calls bets with any pair or any draw, all the way to the river.",
+      "Rarely raises, so when they do, it's real."
+    ],
+    spot: ["High VPIP, very low PFR.", "Shows down bottom pair or missed draws after calling three streets.", "Lots of limping."],
+    beat: [
+      "Never bluff. They call.",
+      "Value-bet thinner (top pair, weak kicker is often good) and bigger.",
+      "Raise to isolate their limps with good hands, and bet every street when ahead.",
+      "If a station raises, fold all but strong hands."
+    ]
+  }
+];
+
+function botNumbers(key) {
+  var st = BOT_STYLES[key];
+  var coOpen = 0;
+  for (var r = 0; r < 13; r++) for (var c = 0; c < 13; c++) {
+    var hand = handAt(r, c);
+    if (handPercentile(hand, false) <= OPEN_PCT.CO * st.open) coOpen += combosOf(hand);
+  }
+  var pct = function (x) { return Math.round(x * 100) + "%"; };
+  return [
+    ["Opens from the cutoff", pctOfCombos(coOpen)],
+    ["C-bets the flop", pct(st.cbet)],
+    ["Bets strong hands", pct(st.valueBet)],
+    ["Slow-plays monsters", pct(st.slowplay)],
+    ["Raises monsters facing a bet", pct(st.raiseValue)],
+    ["Bluffs, compared with a TAG", st.bluff === 1 ? "same" : st.bluff + "× as often"],
+    ["Calls, compared with a TAG", st.callAdj === 0 ? "same" : (st.callAdj > 0 ? "looser" : "tighter")]
+  ];
+}
+
+function renderPlayers() {
+  var quad = $("quad");
+  quad.append(el("span", "axis axis-top", "Aggressive"), el("span", "axis axis-bottom", "Passive"),
+    el("span", "axis axis-left", "Tight"), el("span", "axis axis-right", "Loose"));
+  [["TAG", "q-tl"], ["LAG", "q-tr"], ["NIT", "q-bl"], ["CALL", "q-br"]].forEach(function (pair) {
+    var t = PLAYER_TYPES.find(function (x) { return x.key === pair[0]; });
+    var cell = el("a", "q-cell " + pair[1]);
+    cell.href = "#type-" + t.key.toLowerCase();
+    cell.append(el("span", "q-name", t.short), el("span", "q-full", t.name), el("span", "q-plan", t.plan));
+    quad.append(cell);
+  });
+
+  var body = $("spot-body");
+  PLAYER_TYPES.forEach(function (t) {
+    var tr = el("tr");
+    var name = el("td");
+    name.append(el("span", "type-chip t-" + t.key.toLowerCase(), t.short));
+    tr.append(name, el("td", "num", t.vpip), el("td", "num", t.pfr), el("td", null, t.tell), el("td", null, t.plan));
+    body.append(tr);
+  });
+
+  var host = $("types");
+  PLAYER_TYPES.forEach(function (t) {
+    var card = el("article", "type-card");
+    card.id = "type-" + t.key.toLowerCase();
+    var head = el("header", "type-head");
+    head.append(el("span", "type-chip t-" + t.key.toLowerCase(), t.short), el("h3", null, t.name));
+    card.append(head, el("p", "type-what", t.what));
+    [["How they play", t.plays], ["How to spot them", t.spot], ["How to beat them", t.beat]].forEach(function (block) {
+      var sec = el("div", "type-sec");
+      sec.append(el("h4", null, block[0]));
+      var ul = el("ul");
+      block[1].forEach(function (line) { ul.append(el("li", null, line)); });
+      sec.append(ul);
+      card.append(sec);
+    });
+    var bots = el("div", "type-sec bots");
+    bots.append(el("h4", null, "The " + t.short + " bots at the practice table"));
+    var dl = el("dl", "bot-stats");
+    botNumbers(t.key).forEach(function (row) {
+      var d = el("div");
+      d.append(el("dt", null, row[0]), el("dd", null, row[1]));
+      dl.append(d);
+    });
+    bots.append(dl);
+    card.append(bots);
+    host.append(card);
+  });
+}
+
 renderPositions();
 renderGlance();
+renderPlayers();
 ["UTG", "BTN"].forEach(function (pos) {
   var chart = buildChart({ stage: "cash", stack: "deep", hero: pos, spot: "unopened", opener: null });
   $("rule-" + pos.toLowerCase()).textContent = pctOfCombos(chart.combos.Raise || 0);
