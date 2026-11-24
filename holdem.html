@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Play full Texas Hold'em hands at a 9-handed practice table against bots with different playing styles, and get Claude's feedback on each hand." />
     <title>Hold'em Practice Table</title>
-    <link rel="stylesheet" href="holdem.css?v=10" />
+    <link rel="stylesheet" href="holdem.css?v=12" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
     <header class="topbar">
-      <h1>Practice Table <span class="version" title="If this doesn't say v10, reload the page">v10 · space deals</span></h1>
+      <h1>Practice Table <span class="version" title="If this doesn't say v12, reload the page">v12 · range view</span></h1>
       <nav class="nav">
         <a href="charts.html">Range Charts</a>
         <a href="simulator.html">Pre-Flop Simulator</a>
@@ -73,6 +73,7 @@
         </div>
 
         <div class="controls" id="controls" aria-live="polite"></div>
+        <section class="panel range-view" id="range-view" hidden aria-label="Range view"></section>
       </section>
 
       <aside class="side">
@@ -123,9 +124,9 @@
       </aside>
     </main>
 
-    <script src="engine.js?v=10"></script>
-    <script src="bots.js?v=10"></script>
-    <script src="storage.js?v=10"></script>
-    <script src="holdem.js?v=10"></script>
+    <script src="engine.js?v=12"></script>
+    <script src="bots.js?v=12"></script>
+    <script src="storage.js?v=12"></script>
+    <script src="holdem.js?v=12"></script>
   </body>
 </html>

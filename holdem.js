@@ -681,6 +681,27 @@ function effectiveStack(seat) {
   return Math.min(mine, biggestOther);
 }
 
+// Players already in for the current bet besides the raiser (callers, or all-in for less)
+function callersOfBet(seat, ctx) {
+  return players().filter(function (x, s) {
+    return s !== seat && s !== ctx.lastRaiser && !x.folded && x.bet > 0 && (x.bet >= ctx.currentBet || x.allIn);
+  }).length;
+}
+
+// Each extra player already in shrinks the range that can profitably continue
+const MULTIWAY_SHRINK = 0.3;
+
+// Equity needed to call, counting only what this player can actually put in and win:
+// a short stack calls at most its stack and wins at most that much from each opponent.
+function callPrice(seat, ctx) {
+  var me = players()[seat];
+  var call = Math.min(ctx.toCall, me.stack);
+  var cap = me.total + call;
+  var winnable = table.hand.dead || 0;
+  players().forEach(function (x) { winnable += Math.min(x.total, cap); });
+  return call / (winnable + call);
+}
+
 function limperCount() {
   var bb = table.hand.bb;
   return players().filter(function (p) { return !p.folded && p.pos !== "BB" && p.bet >= bb; }).length;
@@ -744,12 +765,24 @@ function botPreflop(seat, ctx) {
     return { type: "fold" };
   }
 
-  // 3-bet pots, all-ins and big raises: continue on price, jam the very top
+  // 3-bet pots, all-ins and big raises
   if (pPlay <= 0.025) return { type: "raise", to: maxTo };
-  var required = ctx.toCall / (ctx.pot + ctx.toCall);
-  var continuePct = clamp((0.55 - required) * 0.45 * styleOf(p).call, 0.02, 0.35);
-  if (pShove <= continuePct) return { type: "call" };
-  return ctx.toCall === 0 ? { type: "check" } : { type: "fold" };
+  if (ctx.toCall === 0) return { type: "check" };
+  var callers = callersOfBet(seat, ctx);
+  var shrink = Math.pow(MULTIWAY_SHRINK, callers);
+  var bigBet = ctx.raiserAllIn || ctx.toCall >= 0.35 * maxTo;
+  if (bigBet) {
+    // Calling off a stack: priced against the raiser, tighter for every player already in
+    var required = callPrice(seat, ctx);
+    var continuePct = clamp((0.55 - required) * 0.45 * styleOf(p).call, 0.02, 0.35) * shrink;
+    return pShove <= continuePct ? { type: "call" } : { type: "fold" };
+  }
+  // Facing a 3-bet or more: a narrow, fixed calling band that doesn't widen as the pot grows.
+  // Players who already put money in (opened or called) defend more than cold callers.
+  var blindPost = p.pos === "BB" ? table.hand.bb : (p.pos === "SB" ? table.hand.sb : 0);
+  var invested = p.bet > blindPost;
+  var band = (invested ? 0.05 : 0.012) * styleOf(p).call * shrink;
+  return pPlay <= 0.025 + band ? { type: "call" } : { type: "fold" };
 }
 
 // ===== HERO =====
@@ -777,10 +810,11 @@ function heroActsAfter(seat) {
 }
 
 // The chart's answer for any hero pre-flop decision
-function heroChartFor(ctx) {
+function heroChartFor(ctx, handOverride) {
   var p = players()[HERO_SEAT];
   var h = table.hand;
   var sc = preflopScenario(HERO_SEAT, ctx);
+  if (sc && handOverride) sc.hand = handOverride;
   if (sc) {
     var rec = getRecommendation(sc);
     return {
@@ -790,7 +824,7 @@ function heroChartFor(ctx) {
       limpers: ctx.raises === 0 ? limperCount() : 0
     };
   }
-  var hand = handNotation(p.cards);
+  var hand = handOverride || handNotation(p.cards);
   var pPlay = handPercentile(hand, false);
   var pShove = handPercentile(hand, true);
   var tight = h.stage === "late" || h.stage === "final" ? 0.8 : 1;
@@ -807,14 +841,19 @@ function heroChartFor(ctx) {
 
   var bigBet = ctx.raiserAllIn || ctx.toCall >= 0.35 * (p.stack + p.bet);
   if (bigBet) {
-    var required = ctx.toCall / (ctx.pot + ctx.toCall);
-    var callPct = clamp((0.55 - required) * 0.45 * tight, 0.02, 0.3);
+    var required = callPrice(HERO_SEAT, ctx);
+    var callers = callersOfBet(HERO_SEAT, ctx);
+    var callPct = clamp((0.55 - required) * 0.45 * tight, 0.02, 0.3) * Math.pow(MULTIWAY_SHRINK, callers);
     var go = pShove <= callPct;
+    var multiway = callers
+      ? " " + (callers === 1 ? "Another player has" : callers + " other players have") + " already called, so you have to beat " +
+        (callers + 1) + " strong ranges, not one. That cuts it to"
+      : " Against a range this strong that means";
     return {
       spot: ctx.raiserAllIn ? "Facing an all-in" : "Facing a raise that commits your stack",
       action: go ? (ctx.raiserAllIn ? "Call" : "All-In") : "Fold",
-      explanation: "It costs " + fmtBB(Math.min(ctx.toCall, p.stack), h.bb) + " to continue into a pot of " + fmtBB(ctx.pot, h.bb) +
-        ", so you need about " + pct(required) + " equity. Against a range this strong that means roughly the top " + pct(callPct) +
+      explanation: "It costs " + fmtBB(Math.min(ctx.toCall, p.stack), h.bb) + " to continue, and counting only what you can win from each player, you need about " +
+        pct(required) + " equity." + multiway + " roughly the top " + pct(callPct) +
         " of hands by all-in equity; " + hand + " is in the top " + pct(pShove) + "." + stageNote
     };
   }
@@ -1002,7 +1041,82 @@ function renderTable() {
 
 // ===== RENDERING: CONTROLS =====
 
+// ===== RANGE VIEW =====
+
+const RANGE_RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"];
+const RANGE_STYLE = {
+  "Raise": ["r-raise", "Raise"], "3-Bet": ["r-3bet", "3-bet"], "4-Bet": ["r-3bet", "4-bet"],
+  "All-In": ["r-allin", "All-in"], "Call": ["r-call", "Call"], "Check": ["r-check", "Check"], "Fold": ["r-fold", "Fold"]
+};
+let rangeOpen = false;
+
+function rangeHandAt(r, c) {
+  if (r === c) return RANGE_RANKS[r] + RANGE_RANKS[c];
+  return r < c ? RANGE_RANKS[r] + RANGE_RANKS[c] + "s" : RANGE_RANKS[c] + RANGE_RANKS[r] + "o";
+}
+
+function renderRangeView() {
+  var box = $("range-view");
+  var ctx = pendingHero && pendingHero.ctx;
+  box.replaceChildren();
+  if (!rangeOpen || !ctx || ctx.street !== "preflop") { box.hidden = true; return; }
+  box.hidden = false;
+
+  var me = players()[HERO_SEAT];
+  var mine = handNotation(me.cards);
+  var myChart = heroChartFor(ctx);
+  var combos = {};
+  var grid = el("div", "range-grid");
+  for (var r = 0; r < 13; r++) {
+    for (var c = 0; c < 13; c++) {
+      var hand = rangeHandAt(r, c);
+      var chart = heroChartFor(ctx, hand);
+      var action = chart ? chart.action : "Fold";
+      var style = RANGE_STYLE[action] || RANGE_STYLE.Fold;
+      combos[action] = (combos[action] || 0) + (hand.length === 2 ? 6 : (hand[2] === "s" ? 4 : 12));
+      var cell = el("div", "range-cell " + style[0] + (hand === mine ? " mine" : "") + (r === c ? " pair" : ""), hand);
+      cell.title = hand + ": " + style[1];
+      grid.append(cell);
+    }
+  }
+
+  var effBB = Math.round(effectiveStack(HERO_SEAT) / table.hand.bb);
+  var head = el("header", "range-head");
+  var title = el("div");
+  title.append(el("h3", null, (myChart ? myChart.spot : "Pre-flop") + " · " + me.pos),
+    el("p", "range-sub", effBB + "bb effective · " + GAME_STAGES[table.hand.stage].label +
+      (ctx.raises ? " · " + players()[ctx.lastRaiser].pos + " raised last" : "")));
+  var hide = el("button", "btn ghost small", "Hide");
+  hide.type = "button";
+  hide.addEventListener("click", function () { rangeOpen = false; renderControls(); });
+  head.append(title, hide);
+
+  var legend = el("div", "range-legend");
+  ["Raise", "3-Bet", "4-Bet", "All-In", "Call", "Check", "Fold"].forEach(function (a) {
+    if (!combos[a]) return;
+    var item = el("span", "range-legend-item");
+    item.append(el("span", "range-swatch " + RANGE_STYLE[a][0]),
+      document.createTextNode(RANGE_STYLE[a][1] + " " + Math.round(combos[a] / 13.26 * 10) / 10 + "%"));
+    legend.append(item);
+  });
+
+  var myAction = myChart ? myChart.action : "Fold";
+  var myStyle = RANGE_STYLE[myAction] || RANGE_STYLE.Fold;
+  var yours = el("p", "range-yours");
+  yours.append(document.createTextNode("Your hand: "), el("strong", null, cardsText(me.cards) + " (" + mine + ")"),
+    document.createTextNode(" → chart says "), el("strong", "range-act " + myStyle[0], myStyle[1].toLowerCase()));
+  var side = el("div", "range-side");
+  side.append(legend, yours);
+  if (myChart && myChart.explanation) side.append(el("p", "range-why", myChart.explanation));
+  side.append(el("p", "fb-note", "Pairs run down the diagonal, suited hands above it, offsuit below. Your hand is outlined."));
+
+  var body = el("div", "range-body");
+  body.append(grid, side);
+  box.append(head, body);
+}
+
 function renderControls() {
+  renderRangeView();
   var box = $("controls");
   box.replaceChildren();
   var h = table.hand;
@@ -1124,7 +1238,18 @@ function renderControls() {
     });
     box.append(form);
   }
-  box.append(el("p", "controls-note", "Keys: F fold · C check or call"));
+  if (ctx.street === "preflop") {
+    var rangeBtn = el("button", "btn ghost small range-toggle", rangeOpen ? "Hide range" : "Range view");
+    rangeBtn.type = "button";
+    rangeBtn.dataset.key = "r";
+    rangeBtn.setAttribute("aria-expanded", rangeOpen ? "true" : "false");
+    rangeBtn.addEventListener("click", function () {
+      rangeOpen = !rangeOpen;
+      renderControls();
+    });
+    box.append(rangeBtn);
+  }
+  box.append(el("p", "controls-note", "Keys: F fold · C check or call" + (ctx.street === "preflop" ? " · R range view" : "")));
 }
 
 // ===== RENDERING: HAND PANEL =====
