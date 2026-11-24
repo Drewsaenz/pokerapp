@@ -822,7 +822,7 @@ function heroChartFor(ctx) {
   var heroActions = h.actions.filter(function (a) { return a.isHero && a.street === "preflop" && a.type !== "post"; });
   var heroOpened = heroActions.some(function (a) { return a.type === "raise"; });
   if (ctx.raises >= 3) {
-    var line4 = 0.024 * tight;
+    var line4 = 0.02 * tight;
     return {
       spot: "Facing a 4-bet",
       action: pPlay <= line4 ? "All-In" : "Fold",
@@ -1051,7 +1051,7 @@ function renderControls() {
       });
       row.append(top);
     }
-    box.append(row, el("p", "controls-note", h ? "Enter deals the next hand." :
+    box.append(row, el("p", "controls-note", h ? "Space or Enter deals the next hand." :
       "Welcome back. Your table, stacks and session are where you left them. A hand that was still in progress when you left isn't saved."));
     return;
   }
@@ -2068,7 +2068,10 @@ document.addEventListener("keydown", function (e) {
     if (btn) { e.preventDefault(); btn.click(); }
     return;
   }
-  if (e.key === "Enter" && !table.running) {
+  var space = e.key === " " || e.key === "Spacebar";
+  // A focused button or link keeps its own Space behavior
+  if (space && (e.target.tagName === "BUTTON" || e.target.tagName === "A")) return;
+  if ((e.key === "Enter" || space) && !table.running) {
     var next = $("deal-next");
     if (next && !next.disabled) { e.preventDefault(); next.click(); }
   }

@@ -51,9 +51,24 @@ const PLAY_INDEX = indexRanking(PLAY_RANKING);
 const SHOVE_INDEX = indexRanking(SHOVE_RANKING);
 
 // Fraction of all hands that are at least this strong (0.006 for AA, 1.0 for the worst hand)
+// Each hand's share of all 1,326 two-card combos, counting it and every stronger hand.
+// Pairs are 6 combos, suited hands 4, offsuit hands 12, so ranges match real-world charts.
+function cumulativeShare(list) {
+  var share = {};
+  var total = 0;
+  list.forEach(function (hand) {
+    total += hand.length === 2 ? 6 : (hand[2] === "s" ? 4 : 12);
+    share[hand] = total / 1326;
+  });
+  return share;
+}
+
+const PLAY_SHARE = cumulativeShare(PLAY_RANKING);
+const SHOVE_SHARE = cumulativeShare(SHOVE_RANKING);
+
+// Fraction of all starting hands at least this strong (0.0045 for AA, 1.0 for the worst hand)
 function handPercentile(hand, shoving) {
-  var index = shoving ? SHOVE_INDEX : PLAY_INDEX;
-  return (index[hand] + 1) / PLAY_RANKING.length;
+  return (shoving ? SHOVE_SHARE : PLAY_SHARE)[hand];
 }
 
 // ===== TABLE SETUP =====
