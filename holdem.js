@@ -810,10 +810,11 @@ function heroActsAfter(seat) {
 }
 
 // The chart's answer for any hero pre-flop decision
-function heroChartFor(ctx) {
+function heroChartFor(ctx, handOverride) {
   var p = players()[HERO_SEAT];
   var h = table.hand;
   var sc = preflopScenario(HERO_SEAT, ctx);
+  if (sc && handOverride) sc.hand = handOverride;
   if (sc) {
     var rec = getRecommendation(sc);
     return {
@@ -823,7 +824,7 @@ function heroChartFor(ctx) {
       limpers: ctx.raises === 0 ? limperCount() : 0
     };
   }
-  var hand = handNotation(p.cards);
+  var hand = handOverride || handNotation(p.cards);
   var pPlay = handPercentile(hand, false);
   var pShove = handPercentile(hand, true);
   var tight = h.stage === "late" || h.stage === "final" ? 0.8 : 1;
@@ -1040,7 +1041,82 @@ function renderTable() {
 
 // ===== RENDERING: CONTROLS =====
 
+// ===== RANGE VIEW =====
+
+const RANGE_RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"];
+const RANGE_STYLE = {
+  "Raise": ["r-raise", "Raise"], "3-Bet": ["r-3bet", "3-bet"], "4-Bet": ["r-3bet", "4-bet"],
+  "All-In": ["r-allin", "All-in"], "Call": ["r-call", "Call"], "Check": ["r-check", "Check"], "Fold": ["r-fold", "Fold"]
+};
+let rangeOpen = false;
+
+function rangeHandAt(r, c) {
+  if (r === c) return RANGE_RANKS[r] + RANGE_RANKS[c];
+  return r < c ? RANGE_RANKS[r] + RANGE_RANKS[c] + "s" : RANGE_RANKS[c] + RANGE_RANKS[r] + "o";
+}
+
+function renderRangeView() {
+  var box = $("range-view");
+  var ctx = pendingHero && pendingHero.ctx;
+  box.replaceChildren();
+  if (!rangeOpen || !ctx || ctx.street !== "preflop") { box.hidden = true; return; }
+  box.hidden = false;
+
+  var me = players()[HERO_SEAT];
+  var mine = handNotation(me.cards);
+  var myChart = heroChartFor(ctx);
+  var combos = {};
+  var grid = el("div", "range-grid");
+  for (var r = 0; r < 13; r++) {
+    for (var c = 0; c < 13; c++) {
+      var hand = rangeHandAt(r, c);
+      var chart = heroChartFor(ctx, hand);
+      var action = chart ? chart.action : "Fold";
+      var style = RANGE_STYLE[action] || RANGE_STYLE.Fold;
+      combos[action] = (combos[action] || 0) + (hand.length === 2 ? 6 : (hand[2] === "s" ? 4 : 12));
+      var cell = el("div", "range-cell " + style[0] + (hand === mine ? " mine" : "") + (r === c ? " pair" : ""), hand);
+      cell.title = hand + ": " + style[1];
+      grid.append(cell);
+    }
+  }
+
+  var effBB = Math.round(effectiveStack(HERO_SEAT) / table.hand.bb);
+  var head = el("header", "range-head");
+  var title = el("div");
+  title.append(el("h3", null, (myChart ? myChart.spot : "Pre-flop") + " · " + me.pos),
+    el("p", "range-sub", effBB + "bb effective · " + GAME_STAGES[table.hand.stage].label +
+      (ctx.raises ? " · " + players()[ctx.lastRaiser].pos + " raised last" : "")));
+  var hide = el("button", "btn ghost small", "Hide");
+  hide.type = "button";
+  hide.addEventListener("click", function () { rangeOpen = false; renderControls(); });
+  head.append(title, hide);
+
+  var legend = el("div", "range-legend");
+  ["Raise", "3-Bet", "4-Bet", "All-In", "Call", "Check", "Fold"].forEach(function (a) {
+    if (!combos[a]) return;
+    var item = el("span", "range-legend-item");
+    item.append(el("span", "range-swatch " + RANGE_STYLE[a][0]),
+      document.createTextNode(RANGE_STYLE[a][1] + " " + Math.round(combos[a] / 13.26 * 10) / 10 + "%"));
+    legend.append(item);
+  });
+
+  var myAction = myChart ? myChart.action : "Fold";
+  var myStyle = RANGE_STYLE[myAction] || RANGE_STYLE.Fold;
+  var yours = el("p", "range-yours");
+  yours.append(document.createTextNode("Your hand: "), el("strong", null, cardsText(me.cards) + " (" + mine + ")"),
+    document.createTextNode(" → chart says "), el("strong", "range-act " + myStyle[0], myStyle[1].toLowerCase()));
+  var side = el("div", "range-side");
+  side.append(legend, yours);
+  if (myChart && myChart.explanation) side.append(el("p", "range-why", myChart.explanation));
+  side.append(el("p", "fb-note", "Pairs run down the diagonal, suited hands above it, offsuit below. Your hand is outlined."));
+
+  var body = el("div", "range-body");
+  body.append(grid, side);
+  box.append(head, body);
+}
+
 function renderControls() {
+  renderRangeView();
   var box = $("controls");
   box.replaceChildren();
   var h = table.hand;
@@ -1162,7 +1238,18 @@ function renderControls() {
     });
     box.append(form);
   }
-  box.append(el("p", "controls-note", "Keys: F fold · C check or call"));
+  if (ctx.street === "preflop") {
+    var rangeBtn = el("button", "btn ghost small range-toggle", rangeOpen ? "Hide range" : "Range view");
+    rangeBtn.type = "button";
+    rangeBtn.dataset.key = "r";
+    rangeBtn.setAttribute("aria-expanded", rangeOpen ? "true" : "false");
+    rangeBtn.addEventListener("click", function () {
+      rangeOpen = !rangeOpen;
+      renderControls();
+    });
+    box.append(rangeBtn);
+  }
+  box.append(el("p", "controls-note", "Keys: F fold · C check or call" + (ctx.street === "preflop" ? " · R range view" : "")));
 }
 
 // ===== RENDERING: HAND PANEL =====
