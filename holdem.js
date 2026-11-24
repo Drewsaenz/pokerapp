@@ -1287,14 +1287,34 @@ function historyText(h) {
     if (buffer.length) lines.push(current + ": " + buffer.join(", ") + ".");
     buffer = [];
   }
+  // Spell out bet sizes so reviews don't have to do the arithmetic
+  function multiple(x) {
+    var r = Math.round(x * 10) / 10;
+    return (Number.isInteger(r) ? String(r) : r.toFixed(1)) + "×";
+  }
+  var pot = 0;
+  var streetBet = 0;
+  var street = "preflop";
   h.actions.forEach(function (a) {
     if (a.type === "street") {
       flush();
       current = STREET_LABELS[a.street] + " [" + cardsText(a.board, true) + "] (pot " + fmtBB(a.pot, bb) + ")";
+      street = a.street;
+      pot = a.pot;
+      streetBet = 0;
       return;
     }
     var who = a.isHero ? "Hero" : a.pos;
     var text = actionLine(Object.assign({}, a, { isHero: false, name: who }), bb);
+    if (a.type === "raise" && streetBet > 0) {
+      text += street === "preflop" && streetBet <= bb
+        ? " (" + multiple(a.to / bb) + " the big blind)"
+        : " (" + multiple(a.to / streetBet) + " the previous bet)";
+    } else if (a.type === "bet" && pot > 0) {
+      text += " (" + Math.round((a.to / pot) * 100) + "% of the pot)";
+    }
+    pot += a.add || 0;
+    if (a.type !== "post" || a.label !== "ante") streetBet = Math.max(streetBet, a.to || 0);
     buffer.push(text);
   });
   flush();
