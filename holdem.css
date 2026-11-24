@@ -387,9 +387,12 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
 
 .fb-line { margin: 0; font-size: 14px; line-height: 1.5; color: #dde8e0; }
 .fb-line strong { color: var(--text); }
-.fb-line.good strong { color: var(--win); }
-.fb-line.bad strong { color: var(--loss); }
-.fb-line.close strong { color: var(--brass); }
+.fb-line.v-excellent strong, .v-excellent { color: #8ff0b0; }
+.fb-line.v-good strong, .v-good { color: var(--win); }
+.fb-line.v-okay strong, .v-okay { color: var(--text); }
+.fb-line.v-questionable strong, .v-questionable { color: var(--brass); }
+.fb-line.v-mistake strong, .v-mistake { color: var(--loss); }
+.fb-line.v-big strong, .v-big { color: #ff6b6b; }
 .fb-thinking { margin: 0; font-size: 14px; color: var(--muted); }
 .fb-note { margin: 0; font-size: 12px; color: var(--muted); }
 
@@ -547,3 +550,20 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
 .rest-hands li.wins .rest-made { color: var(--win); font-weight: 600; }
 .rest-who { font-weight: 600; color: var(--text); }
 .rest-folded { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* Hand archive */
+
+.archive-row { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+.archive-count { margin: 0; font-size: 13px; color: #c8d6cc; line-height: 1.4; }
+.archive-count strong { color: var(--text); }
+.archive-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.archive-copy:empty { display: none; }
+.fb-note.warn { color: var(--loss); }
+.fb-note:empty { display: none; }
+
+.hr-reviewed.v-excellent { color: #8ff0b0; }
+.hr-reviewed.v-good { color: var(--win); }
+.hr-reviewed.v-okay { color: var(--text); }
+.hr-reviewed.v-questionable { color: var(--brass); }
+.hr-reviewed.v-mistake { color: var(--loss); }
+.hr-reviewed.v-big { color: #ff6b6b; }

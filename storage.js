@@ -135,3 +135,159 @@ async function persist() {
   }
   if (typeof renderSaveStatus === "function") renderSaveStatus();
 }
+
+// ===== HAND ARCHIVE =====
+// Every finished hand, kept as its written hand history (plus any review) until the player erases it.
+// Claude version: players/<id>/archive/<chunk> documents, readable by the artifact's owner so
+// Claude can pull them into a chat. Hosted site: one localStorage key.
+
+const ARCHIVE_KEY = "pokerapp.archive.v1";
+const ARCHIVE_CHUNK = 50;
+
+const archive = { kind: "pending", count: 0, local: [], chunk: null, chunkIndex: 0, error: "" };
+let archiveRemote = null;
+let archiveChain = Promise.resolve();
+
+function queueArchive(task) {
+  archiveChain = archiveChain.then(task).catch(function () {
+    archive.error = "A hand couldn't be added to your archive.";
+    if (typeof renderArchive === "function") renderArchive();
+  });
+  return archiveChain;
+}
+
+function chunkId(i) {
+  return "c" + String(i).padStart(6, "0");
+}
+
+async function claudeArchive() {
+  if (!window.claude || typeof window.claude.use !== "function") return null;
+  var caps = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+  var db = caps[0], user = caps[1];
+  if (!db || !user) return null;
+  var uid = await user.id();
+  if (!uid) return null;
+  var playerDoc = db.doc("players/" + uid);
+  var chunks = playerDoc.collection("archive");
+  return { playerDoc: playerDoc, chunks: chunks };
+}
+
+async function loadArchive() {
+  try {
+    archiveRemote = await withTimeout(claudeArchive(), 12000);
+  } catch (e) {
+    archiveRemote = null;
+  }
+  if (archiveRemote) {
+    try {
+      var snap = await withTimeout(archiveRemote.playerDoc.get(), 10000);
+      var info = snap.exists ? snap.data() : {};
+      archive.count = info.count || 0;
+      archive.chunkIndex = info.chunkIndex || 0;
+      var chunkSnap = await archiveRemote.chunks.doc(chunkId(archive.chunkIndex)).get();
+      archive.chunk = chunkSnap.exists ? JSON.parse(JSON.stringify(chunkSnap.data().hands || [])) : [];
+      archive.kind = "claude";
+      return;
+    } catch (e) {
+      archiveRemote = null;
+    }
+  }
+  archive.kind = "local";
+  try {
+    archive.local = JSON.parse(localStorage.getItem(ARCHIVE_KEY) || "[]");
+  } catch (e) {
+    archive.local = [];
+  }
+  archive.count = archive.local.length;
+}
+
+function saveLocalArchive() {
+  try {
+    localStorage.setItem(ARCHIVE_KEY, JSON.stringify(archive.local));
+    archive.error = "";
+  } catch (e) {
+    archive.error = "This browser's storage is full. Download your hands, then erase them to keep archiving.";
+  }
+}
+
+async function writeRemoteChunk() {
+  await archiveRemote.chunks.doc(chunkId(archive.chunkIndex)).set({ hands: archive.chunk });
+  await archiveRemote.playerDoc.set({ count: archive.count, chunkIndex: archive.chunkIndex, updatedAt: Date.now() });
+}
+
+function archiveAdd(entry) {
+  return queueArchive(async function () {
+    if (archive.kind === "claude") {
+      if (archive.chunk.length >= ARCHIVE_CHUNK) {
+        archive.chunkIndex += 1;
+        archive.chunk = [];
+      }
+      entry.chunk = archive.chunkIndex;
+      archive.chunk.push(entry);
+      archive.count += 1;
+      await writeRemoteChunk();
+      archive.error = "";
+    } else {
+      archive.local.push(entry);
+      archive.count = archive.local.length;
+      saveLocalArchive();
+    }
+    if (typeof renderArchive === "function") renderArchive();
+  });
+}
+
+function archiveUpdate(id, patch) {
+  return queueArchive(async function () {
+    if (archive.kind === "claude") {
+      var inCurrent = archive.chunk.find(function (e) { return e.id === id; });
+      if (inCurrent) {
+        Object.assign(inCurrent, patch);
+        await writeRemoteChunk();
+        return;
+      }
+      var snaps = await archiveRemote.chunks.get();
+      for (var i = 0; i < snaps.docs.length; i++) {
+        var hands = JSON.parse(JSON.stringify(snaps.docs[i].data().hands || []));
+        var hit = hands.find(function (e) { return e.id === id; });
+        if (hit) {
+          Object.assign(hit, patch);
+          await archiveRemote.chunks.doc(snaps.docs[i].id).set({ hands: hands });
+          return;
+        }
+      }
+    } else {
+      var entry = archive.local.find(function (e) { return e.id === id; });
+      if (entry) { Object.assign(entry, patch); saveLocalArchive(); }
+    }
+  });
+}
+
+async function archiveAll() {
+  await archiveChain;
+  if (archive.kind === "claude") {
+    var snaps = await archiveRemote.chunks.get();
+    var all = [];
+    snaps.docs.forEach(function (d) { all = all.concat(d.data().hands || []); });
+    return all;
+  }
+  return archive.local.slice();
+}
+
+function archiveErase() {
+  return queueArchive(async function () {
+    if (archive.kind === "claude") {
+      var snaps = await archiveRemote.chunks.get();
+      for (var i = 0; i < snaps.docs.length; i++) await archiveRemote.chunks.doc(snaps.docs[i].id).delete();
+      archive.chunk = [];
+      archive.chunkIndex = 0;
+      archive.count = 0;
+      await archiveRemote.playerDoc.set({ count: 0, chunkIndex: 0, updatedAt: Date.now() });
+    } else {
+      archive.local = [];
+      archive.count = 0;
+      try { localStorage.removeItem(ARCHIVE_KEY); } catch (e) { /* nothing stored */ }
+    }
+    archive.error = "";
+    if (typeof renderArchive === "function") renderArchive();
+  });
+}

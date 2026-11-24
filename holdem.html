@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Play full Texas Hold'em hands at a 9-handed practice table against bots with different playing styles, and get Claude's feedback on each hand." />
     <title>Hold'em Practice Table</title>
-    <link rel="stylesheet" href="holdem.css?v=6" />
+    <link rel="stylesheet" href="holdem.css?v=7" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
     <header class="topbar">
-      <h1>Practice Table <span class="version" title="If this doesn't say v6, reload the page">v6 · clearer reviews</span></h1>
+      <h1>Practice Table <span class="version" title="If this doesn't say v7, reload the page">v7 · hand archive, table sizes</span></h1>
       <nav class="nav">
         <a href="simulator.html">Pre-Flop Simulator</a>
         <a href="index.html">Action Generator</a>
@@ -25,6 +25,14 @@
             <select id="set-mode">
               <option value="cash">Cash game</option>
               <option value="tournament">Tournament</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="set-size">Players</label>
+            <select id="set-size">
+              <option value="9">9-handed (full ring)</option>
+              <option value="6">6-handed</option>
+              <option value="varies">Varies (players come and go)</option>
             </select>
           </div>
           <div class="field" id="field-depth">
@@ -108,14 +116,15 @@
               <tbody id="sessions-body"></tbody>
             </table>
           </div>
+          <div class="archive-row" id="archive-row"></div>
           <div class="reset-row" id="reset-row"></div>
         </section>
       </aside>
     </main>
 
-    <script src="engine.js?v=6"></script>
-    <script src="bots.js?v=6"></script>
-    <script src="storage.js?v=6"></script>
-    <script src="holdem.js?v=6"></script>
+    <script src="engine.js?v=7"></script>
+    <script src="bots.js?v=7"></script>
+    <script src="storage.js?v=7"></script>
+    <script src="holdem.js?v=7"></script>
   </body>
 </html>

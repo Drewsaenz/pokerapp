@@ -3,9 +3,12 @@
 
 // ===== TABLE CONFIG =====
 
-const SEAT_COUNT = 9;
 const HERO_SEAT = 0;
-const POS_BY_OFFSET = ["BTN", "SB", "BB", "UTG", "UTG+1", "UTG+2", "LJ", "HJ", "CO"];
+// Seats after the blinds, earliest first. Short-handed tables drop the earliest ones,
+// so a 6-handed table runs LJ, HJ, CO, BTN, SB, BB and uses those seats' ranges.
+const EARLY_TO_LATE = ["UTG", "UTG+1", "UTG+2", "LJ", "HJ", "CO"];
+const MIN_PLAYERS = 3;
+const MAX_PLAYERS = 9;
 const PREFLOP_ORDER = ["UTG", "UTG+1", "UTG+2", "LJ", "HJ", "CO", "BTN", "SB", "BB"];
 const POSTFLOP_ORDER = ["SB", "BB", "UTG", "UTG+1", "UTG+2", "LJ", "HJ", "CO", "BTN"];
 const STREET_LABELS = { preflop: "Pre-flop", flop: "Flop", turn: "Turn", river: "River" };
@@ -89,12 +92,29 @@ function players() {
   return table.players;
 }
 
+function seatCount() {
+  return table.players.length || MAX_PLAYERS;
+}
+
+// Positions by seats clockwise from the button
+function positionsFor(n) {
+  return ["BTN", "SB", "BB"].concat(EARLY_TO_LATE.slice(MAX_PLAYERS - n));
+}
+
 function positionOf(seat) {
-  return POS_BY_OFFSET[(seat - table.button + SEAT_COUNT) % SEAT_COUNT];
+  var n = seatCount();
+  return positionsFor(n)[(seat - table.button + n) % n];
+}
+
+// Seats in acting order for a street, skipping positions this table size doesn't have
+function actingOrder(street) {
+  return (street === "preflop" ? PREFLOP_ORDER : POSTFLOP_ORDER).map(seatOfPos).filter(function (s) { return s >= 0; });
 }
 
 function seatOfPos(pos) {
-  return (table.button + POS_BY_OFFSET.indexOf(pos)) % SEAT_COUNT;
+  var n = seatCount();
+  var idx = positionsFor(n).indexOf(pos);
+  return idx < 0 ? -1 : (table.button + idx) % n;
 }
 
 // Antes are dead money: in the pot, but not part of anyone's bet
@@ -242,6 +262,7 @@ function readSettings() {
     mode: $("set-mode").value,
     cashDepth: parseInt($("set-depth").value, 10),
     levelLength: parseInt($("set-level").value, 10),
+    tableSize: $("set-size").value,
     speed: $("set-speed").value
   };
 }
@@ -255,6 +276,35 @@ function syncSettingsVisibility() {
 function blinds() {
   if (table.settings.mode === "cash") return CASH_BLINDS;
   return TOURNEY_LEVELS[Math.min(table.level, TOURNEY_LEVELS.length - 1)];
+}
+
+function startingTableSize() {
+  var size = table.settings.tableSize;
+  if (size === "varies") return randomInt(5, MAX_PLAYERS);
+  return parseInt(size, 10) || MAX_PLAYERS;
+}
+
+// In a "varies" cash game, players leave and sit down between hands, like a real card room
+function tableChurn() {
+  var notes = [];
+  var n = seatCount();
+  if (n > 4 && Math.random() < 0.12) {
+    var leave = randomInt(1, n - 1);
+    var gone = table.players[leave];
+    table.players.splice(leave, 1);
+    table.usedNames.delete(gone.name);
+    if (leave < table.button) table.button -= 1;
+    table.button = table.button % table.players.length;
+    notes.push(gone.name + " leaves the table.");
+  } else if (n < MAX_PLAYERS && Math.random() < 0.15) {
+    var at = randomInt(1, n);
+    var fresh = makePlayer(nextBotName(), startingStack(), false);
+    table.players.splice(at, 0, fresh);
+    if (at <= table.button) table.button += 1;
+    notes.push(fresh.name + " sits down.");
+  }
+  if (notes.length) notes.push("Now " + table.players.length + "-handed.");
+  return notes;
 }
 
 function startingStack() {
@@ -298,10 +348,11 @@ function newSession() {
   table.notice = "";
   var start = startingStack();
   table.players = [];
-  for (var i = 0; i < SEAT_COUNT; i++) {
+  var size = startingTableSize();
+  for (var i = 0; i < size; i++) {
     table.players.push(i === HERO_SEAT ? makePlayer("You", start, true) : makePlayer(nextBotName(), start, false));
   }
-  table.button = randomInt(0, SEAT_COUNT - 1);
+  table.button = randomInt(0, size - 1);
   $("session-review-out").replaceChildren();
   startSessionRecord();
   saveTable();
@@ -339,7 +390,8 @@ function betweenHands() {
       notes.push("Blinds up: " + b.sb + "/" + b.bb + (b.ante ? ", ante " + b.ante : "") + ".");
     }
   }
-  table.button = (table.button + 1) % SEAT_COUNT;
+  if (cash && table.settings.tableSize === "varies") notes = notes.concat(tableChurn());
+  table.button = (table.button + 1) % seatCount();
   table.notice = notes.join(" ");
 }
 
@@ -445,7 +497,7 @@ async function playHand() {
 
 async function bettingRound(street) {
   var h = table.hand;
-  var order = (street === "preflop" ? PREFLOP_ORDER : POSTFLOP_ORDER).map(seatOfPos);
+  var order = actingOrder(street);
   var currentBet = street === "preflop" ? h.bb : 0;
   var minRaise = h.bb;
   var raises = 0;
@@ -590,7 +642,7 @@ function settle() {
       });
       var share = Math.floor(pot.amount / winners.length);
       var odd = pot.amount - share * winners.length;
-      var orderedWinners = POSTFLOP_ORDER.map(seatOfPos).filter(function (s) { return winners.indexOf(s) !== -1; });
+      var orderedWinners = actingOrder("flop").filter(function (s) { return winners.indexOf(s) !== -1; });
       orderedWinners.forEach(function (seat, idx) {
         var amt = share + (idx === 0 ? odd : 0);
         ps[seat].stack += amt;
@@ -847,7 +899,7 @@ function raisePresets(ctx) {
 // ===== RENDERING: TABLE =====
 
 function seatPoint(seat, rx, ry) {
-  var angle = (90 + seat * (360 / SEAT_COUNT)) * Math.PI / 180;
+  var angle = (90 + seat * (360 / seatCount())) * Math.PI / 180;
   return { x: 50 + rx * Math.cos(angle), y: 50 + ry * Math.sin(angle) };
 }
 
@@ -1263,6 +1315,115 @@ function renderChartCheck(h) {
   });
 }
 
+// ===== VERDICT GRADES =====
+
+// Longest names first so "Big mistake" isn't read as "Mistake"; "Close spot" is the old scale's middle grade
+const VERDICT_GRADES = [
+  { name: "Big mistake", key: "big" },
+  { name: "Questionable", key: "questionable" },
+  { name: "Excellent", key: "excellent" },
+  { name: "Close spot", key: "okay", label: "Okay" },
+  { name: "Mistake", key: "mistake" },
+  { name: "Good", key: "good" },
+  { name: "Okay", key: "okay" }
+];
+
+function verdictGrade(text) {
+  var t = String(text || "").replace(/\*/g, "").trim().toLowerCase();
+  for (var i = 0; i < VERDICT_GRADES.length; i++) {
+    if (t.indexOf(VERDICT_GRADES[i].name.toLowerCase()) === 0) {
+      return { key: VERDICT_GRADES[i].key, label: VERDICT_GRADES[i].label || VERDICT_GRADES[i].name };
+    }
+  }
+  return null;
+}
+
+function reviewGrade(review) {
+  var m = String(review || "").match(/verdict\s*:\s*(.*)/i);
+  return m ? verdictGrade(m[1]) : null;
+}
+
+// ===== HAND ARCHIVE (UI) =====
+
+function archiveEntry(h) {
+  var grade = reviewGrade(h.review);
+  return {
+    id: h.sessionId + "-" + h.no,
+    at: h.at,
+    sessionId: h.sessionId,
+    no: h.no,
+    mode: h.mode,
+    net: round1(h.heroNet / h.bb),
+    text: historyText(h),
+    review: h.review || null,
+    verdict: grade ? grade.label : null
+  };
+}
+
+function exportText(entries) {
+  var header = "Hold'em Practice Table: " + entries.length + " hands, exported " + new Date().toLocaleString() + ".";
+  return [header].concat(entries.map(function (e) {
+    return e.text + (e.review ? "\nClaude's review:\n" + e.review : "");
+  })).join("\n\n---\n\n") + "\n";
+}
+
+function exportFilename() {
+  return "poker-hands-" + new Date().toISOString().slice(0, 10) + ".txt";
+}
+
+async function downloadArchive(note) {
+  note.textContent = "Preparing your hands…";
+  var entries = await archiveAll();
+  if (!entries.length) { note.textContent = "No hands archived yet."; return; }
+  var text = exportText(entries);
+  var downloads = window.claude && typeof window.claude.use === "function" ? await window.claude.use("downloads") : null;
+  if (downloads) {
+    try {
+      await downloads.save({ filename: exportFilename(), data: text });
+      note.textContent = "Saved " + entries.length + " hands.";
+    } catch (e) {
+      note.textContent = e && e.code === "declined" ? "Download cancelled." : "Downloads aren't available here. Use Copy all hands instead.";
+    }
+    return;
+  }
+  var url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = exportFilename();
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+  note.textContent = "Downloaded " + entries.length + " hands.";
+}
+
+function renderArchive() {
+  var box = $("archive-row");
+  if (!box) return;
+  box.replaceChildren();
+  var head = el("p", "archive-count");
+  head.append(el("strong", null, archive.count + (archive.count === 1 ? " hand" : " hands")),
+    document.createTextNode(" in your archive" + (archive.kind === "claude" ? " on your Claude account. Ask Claude in your chat to review them." : " on this device.")));
+  box.append(head);
+  var note = el("p", "fb-note");
+  if (archive.error) { note.textContent = archive.error; note.classList.add("warn"); }
+  if (archive.count) {
+    var row = el("div", "archive-actions");
+    var dl = el("button", "btn ghost small", "Download all hands");
+    dl.type = "button";
+    dl.addEventListener("click", function () { downloadArchive(note); });
+    var cp = el("button", "btn ghost small", "Copy all hands");
+    cp.type = "button";
+    var copyHost = el("div", "archive-copy");
+    cp.addEventListener("click", function () {
+      archiveAll().then(function (entries) { copyText(exportText(entries), copyHost); });
+    });
+    row.append(dl, cp);
+    box.append(row, copyHost);
+  }
+  box.append(note);
+}
+
 // ===== HAND HISTORY TEXT (for Claude) =====
 
 function historyText(h) {
@@ -1272,10 +1433,12 @@ function historyText(h) {
     ? "Cash game, blinds $" + h.sb + "/$" + h.bb
     : "Tournament, " + GAME_STAGES[h.stage].label.replace("Tournament · ", "").toLowerCase() + " stage, level " + (h.level + 1) +
       ": blinds " + h.sb + "/" + h.bb + (h.ante ? ", big-blind ante " + h.ante : "");
-  lines.push("Hand #" + h.no + " — " + game + ", 9-handed. Amounts in big blinds.");
+  lines.push("Hand #" + h.no + " — " + game + ", " + h.seats.length + "-handed. Amounts in big blinds.");
   lines.push("Hero: " + h.heroPos + " with " + cardsText(h.heroCards, true) + " (" + h.heroHand + "), stack " +
     fmtBB(h.seats[HERO_SEAT].stack, bb) + ".");
-  var stacks = PREFLOP_ORDER.map(function (pos) {
+  var stacks = PREFLOP_ORDER.filter(function (pos) {
+    return h.seats.some(function (x) { return x.pos === pos; });
+  }).map(function (pos) {
     var s = h.seats.find(function (x) { return x.pos === pos; });
     return pos + (s.isHero ? " (Hero)" : " (" + BOT_STYLES[s.style].name + ")") + " " + fmtBB(s.stack, bb);
   });
@@ -1353,7 +1516,9 @@ function handPrompt(h) {
     historyText(h),
     "",
     "Reply in plain text, under 200 words, with exactly these four labelled lines and nothing else:",
-    "Verdict: Good, Close spot, or Mistake, followed by a short reason.",
+    "Verdict: exactly one of Excellent, Good, Okay, Questionable, Mistake or Big mistake, followed by a short reason. " +
+      "Excellent = optimal or a strong exploit; Good = solid, no real errors; Okay = small inaccuracies that cost little; " +
+      "Questionable = a clear but small leak; Mistake = cost real money; Big mistake = cost a lot.",
     "Pre-flop: one to three sentences on Hero's pre-flop play, using position, stack depth and stage.",
     "Post-flop: one to three sentences, or \"Hand ended pre-flop.\"",
     "Takeaway: one rule of thumb Hero can use next time.",
@@ -1413,8 +1578,8 @@ function renderFeedback(container, text) {
     if (m) {
       p.append(el("strong", null, m[1] + ": "), document.createTextNode(line.slice(m[0].length)));
       if (/^verdict/i.test(m[1])) {
-        var v = line.slice(m[0].length).toLowerCase();
-        p.classList.add(v.indexOf("mistake") === 0 ? "bad" : v.indexOf("good") === 0 ? "good" : "close");
+        var grade = verdictGrade(line.slice(m[0].length));
+        if (grade) p.classList.add("v-" + grade.key);
       }
     } else {
       p.textContent = line;
@@ -1503,7 +1668,13 @@ function renderReview() {
     ask.type = "button";
     ask.disabled = !!activeReview;
     ask.addEventListener("click", function () {
-      runReview(handPrompt(h), out, function (text) { h.review = text; persist(); });
+      runReview(handPrompt(h), out, function (text) {
+        h.review = text;
+        persist();
+        var grade = reviewGrade(text);
+        archiveUpdate(h.sessionId + "-" + h.no, { review: text, verdict: grade ? grade.label : null });
+        renderSession();
+      });
     });
     actions.append(ask);
   } else if (sampleState === "pending") {
@@ -1581,6 +1752,7 @@ function recordHand(h) {
   }
   saved.curve.push(round1(h.heroNet / h.bb));
   saveTable();
+  archiveAdd(archiveEntry(h));
   renderProgress();
 }
 
@@ -1600,12 +1772,14 @@ function restoreTable() {
   table.over = !!t.over;
   table.sessionId = t.sessionId;
   table.usedNames = new Set(t.usedNames || []);
-  table.players = t.players.map(function (x, seat) {
+  if (!t.settings.tableSize) t.settings.tableSize = "9";
+  $("set-size").value = t.settings.tableSize;
+  table.players = t.players.map(function (x) {
     var p = makePlayer(x.name, x.stack, x.isHero);
     p.style = x.style;
-    p.pos = positionOf(seat);
     return p;
   });
+  table.players.forEach(function (p, seat) { p.pos = positionOf(seat); });
   table.hand = null;
   table.sessionHands = saved.recent.filter(function (h) { return h.sessionId === t.sessionId; });
   table.viewing = table.sessionHands[0] || null;
@@ -1783,7 +1957,7 @@ function renderProgress() {
     reset.append(ask);
     return;
   }
-  reset.append(el("span", "erase-q", "Erase all saved hands, sessions and stats? This can't be undone."));
+  reset.append(el("span", "erase-q", "Erase all saved hands, your hand archive, sessions and stats? Download your hands first if you want to keep them. This can't be undone."));
   var yes = el("button", "btn fold small", "Erase");
   yes.type = "button";
   yes.addEventListener("click", function () {
@@ -1791,6 +1965,7 @@ function renderProgress() {
     saved.sessions = [];
     saved.curve = [];
     saved.recent = [];
+    archiveErase();
     table.sessionHands = [];
     table.viewing = table.running ? table.hand : null;
     if (table.settings) startSessionRecord();
@@ -1845,7 +2020,10 @@ function renderSession() {
       el("span", "hr-chart " + (chartVerdict(h) || "none"), chartVerdict(h) === "miss" ? "off chart" : ""),
       el("span", "hr-net " + (h.heroNet > 0 ? "up" : h.heroNet < 0 ? "down" : "flat"), signedBB(h.heroNet, h.bb))
     );
-    if (h.review) b.append(el("span", "hr-reviewed", "reviewed"));
+    if (h.review) {
+      var grade = reviewGrade(h.review);
+      b.append(el("span", "hr-reviewed" + (grade ? " v-" + grade.key : ""), grade ? grade.label : "reviewed"));
+    }
     b.addEventListener("click", function () {
       table.viewing = h;
       renderPanel();
@@ -1907,11 +2085,12 @@ window.addEventListener("resize", function () {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(renderProgress, 150);
 });
-loadProgress().then(function () {
+Promise.all([loadProgress(), loadArchive()]).then(function () {
   table.loading = false;
   if (saved.table && saved.table.players && saved.table.players.length) restoreTable();
   renderSaveStatus();
   renderAll();
   renderPanel();
   renderProgress();
+  renderArchive();
 });

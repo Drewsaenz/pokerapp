@@ -45,12 +45,15 @@ The thresholds are approximations of common charts, not solver output. All the n
 A 9-handed table where you play full hands against eight bots, then get feedback on them.
 
 - **Games**: cash (100bb, 40bb or 15bb buy-in) or a tournament whose blinds rise every 6, 10 or 15 hands, moving through the early, middle (big-blind ante), bubble and final-table stages. Busted bots are replaced so the table stays full.
+- **Table size**: 9-handed, 6-handed, or "Varies", where (in cash games) players leave and sit down between hands, anywhere from 3 to 9. Short-handed tables drop the earliest positions, so 6-handed runs LJ, HJ, CO, BTN, SB, BB with those seats' ranges.
 - **Bots** each have a style shown on their seat: TAG (tight-aggressive), LAG (loose-aggressive), Nit (tight-passive) or Station (calling station). Pre-flop they play the simulator's chart ranges, widened or narrowed by style. Post-flop (`bots.js`) they:
   - estimate each opponent's range from that opponent's actions in the hand (an open, a 3-bet, a call, bets on earlier streets),
   - simulate a few hundred run-outs against those ranges to get their equity, without ever seeing your cards,
   - then value-bet, slow-play, c-bet, semi-bluff, bluff, raise, call or fold, at frequencies set by their style, sizing bets to the board.
 - **Chart check**: after each hand, every pre-flop decision you made is graded against the chart: folded to you, facing a raise, facing a 3-bet (cold, after calling, or after opening), facing a 4-bet, facing an all-in or a stack-committing raise, and limped pots in the big blind.
 - **See the rest of the hand**: when a hand ends without a showdown, reveal the cards that would have come next, everyone's hole cards, and who would have won if it had been checked down. It's hindsight, so it isn't sent to Claude reviews.
+- **Hand archive**: every hand is kept as its written history (plus any review) until you erase it. "Download all hands" saves a .txt file and "Copy all hands" copies it, ready to paste into a Claude chat. In the Claude version the archive lives on your Claude account where the page's owner can read it, so Claude can pull your hands into a chat for review.
+- **Review grades**: Excellent, Good, Okay, Questionable, Mistake or Big mistake, color-coded in the review and the hand list.
 - **Saved progress** (`storage.js`): your table, every session's results, a results chart and your last 100 hands survive closing the page. On the hosted site they're saved in that browser (each device keeps its own). Opened as a Claude artifact, they're saved privately to your Claude account (last 40 hands) and follow you across devices.
 - **Claude feedback**: opened as a Claude artifact, the page can send a hand (or your last 10) to Claude and show a review in the page. Anywhere else, use "Copy hand history" and paste it into a chat.
 
@@ -64,7 +67,7 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 
 ## Updating the hosted site
 
-GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=6`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
+GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=7`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
 
 ## Files
 
