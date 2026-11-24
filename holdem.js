@@ -681,6 +681,27 @@ function effectiveStack(seat) {
   return Math.min(mine, biggestOther);
 }
 
+// Players already in for the current bet besides the raiser (callers, or all-in for less)
+function callersOfBet(seat, ctx) {
+  return players().filter(function (x, s) {
+    return s !== seat && s !== ctx.lastRaiser && !x.folded && x.bet > 0 && (x.bet >= ctx.currentBet || x.allIn);
+  }).length;
+}
+
+// Each extra player already in shrinks the range that can profitably continue
+const MULTIWAY_SHRINK = 0.3;
+
+// Equity needed to call, counting only what this player can actually put in and win:
+// a short stack calls at most its stack and wins at most that much from each opponent.
+function callPrice(seat, ctx) {
+  var me = players()[seat];
+  var call = Math.min(ctx.toCall, me.stack);
+  var cap = me.total + call;
+  var winnable = table.hand.dead || 0;
+  players().forEach(function (x) { winnable += Math.min(x.total, cap); });
+  return call / (winnable + call);
+}
+
 function limperCount() {
   var bb = table.hand.bb;
   return players().filter(function (p) { return !p.folded && p.pos !== "BB" && p.bet >= bb; }).length;
@@ -744,12 +765,24 @@ function botPreflop(seat, ctx) {
     return { type: "fold" };
   }
 
-  // 3-bet pots, all-ins and big raises: continue on price, jam the very top
+  // 3-bet pots, all-ins and big raises
   if (pPlay <= 0.025) return { type: "raise", to: maxTo };
-  var required = ctx.toCall / (ctx.pot + ctx.toCall);
-  var continuePct = clamp((0.55 - required) * 0.45 * styleOf(p).call, 0.02, 0.35);
-  if (pShove <= continuePct) return { type: "call" };
-  return ctx.toCall === 0 ? { type: "check" } : { type: "fold" };
+  if (ctx.toCall === 0) return { type: "check" };
+  var callers = callersOfBet(seat, ctx);
+  var shrink = Math.pow(MULTIWAY_SHRINK, callers);
+  var bigBet = ctx.raiserAllIn || ctx.toCall >= 0.35 * maxTo;
+  if (bigBet) {
+    // Calling off a stack: priced against the raiser, tighter for every player already in
+    var required = callPrice(seat, ctx);
+    var continuePct = clamp((0.55 - required) * 0.45 * styleOf(p).call, 0.02, 0.35) * shrink;
+    return pShove <= continuePct ? { type: "call" } : { type: "fold" };
+  }
+  // Facing a 3-bet or more: a narrow, fixed calling band that doesn't widen as the pot grows.
+  // Players who already put money in (opened or called) defend more than cold callers.
+  var blindPost = p.pos === "BB" ? table.hand.bb : (p.pos === "SB" ? table.hand.sb : 0);
+  var invested = p.bet > blindPost;
+  var band = (invested ? 0.05 : 0.012) * styleOf(p).call * shrink;
+  return pPlay <= 0.025 + band ? { type: "call" } : { type: "fold" };
 }
 
 // ===== HERO =====
@@ -807,14 +840,19 @@ function heroChartFor(ctx) {
 
   var bigBet = ctx.raiserAllIn || ctx.toCall >= 0.35 * (p.stack + p.bet);
   if (bigBet) {
-    var required = ctx.toCall / (ctx.pot + ctx.toCall);
-    var callPct = clamp((0.55 - required) * 0.45 * tight, 0.02, 0.3);
+    var required = callPrice(HERO_SEAT, ctx);
+    var callers = callersOfBet(HERO_SEAT, ctx);
+    var callPct = clamp((0.55 - required) * 0.45 * tight, 0.02, 0.3) * Math.pow(MULTIWAY_SHRINK, callers);
     var go = pShove <= callPct;
+    var multiway = callers
+      ? " " + (callers === 1 ? "Another player has" : callers + " other players have") + " already called, so you have to beat " +
+        (callers + 1) + " strong ranges, not one. That cuts it to"
+      : " Against a range this strong that means";
     return {
       spot: ctx.raiserAllIn ? "Facing an all-in" : "Facing a raise that commits your stack",
       action: go ? (ctx.raiserAllIn ? "Call" : "All-In") : "Fold",
-      explanation: "It costs " + fmtBB(Math.min(ctx.toCall, p.stack), h.bb) + " to continue into a pot of " + fmtBB(ctx.pot, h.bb) +
-        ", so you need about " + pct(required) + " equity. Against a range this strong that means roughly the top " + pct(callPct) +
+      explanation: "It costs " + fmtBB(Math.min(ctx.toCall, p.stack), h.bb) + " to continue, and counting only what you can win from each player, you need about " +
+        pct(required) + " equity." + multiway + " roughly the top " + pct(callPct) +
         " of hands by all-in equity; " + hand + " is in the top " + pct(pShove) + "." + stageNote
     };
   }
