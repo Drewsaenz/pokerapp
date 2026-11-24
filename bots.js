@@ -210,7 +210,7 @@ function estimateEquity(seat, iterations) {
 }
 
 function isInPosition(seat) {
-  var order = POSTFLOP_ORDER.map(seatOfPos);
+  var order = actingOrder("flop");
   var mine = order.indexOf(seat);
   return order.every(function (s, idx) { return s === seat || players()[s].folded || idx < mine; });
 }
