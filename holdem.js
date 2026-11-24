@@ -822,7 +822,7 @@ function heroChartFor(ctx) {
   var heroActions = h.actions.filter(function (a) { return a.isHero && a.street === "preflop" && a.type !== "post"; });
   var heroOpened = heroActions.some(function (a) { return a.type === "raise"; });
   if (ctx.raises >= 3) {
-    var line4 = 0.024 * tight;
+    var line4 = 0.02 * tight;
     return {
       spot: "Facing a 4-bet",
       action: pPlay <= line4 ? "All-In" : "Fold",

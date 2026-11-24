@@ -34,11 +34,20 @@ Keyboard: `1`–`3` to choose an action, `Enter` or `Space` for the next hand.
 
 Rather than hand-coding a range list for every combination of stage × position × stack × spot, `engine.js` ranks all 169 starting hands once and compares a hand's percentile against a threshold that's adjusted for the scenario:
 
-1. **Two hand rankings.** `PLAY_RANKING` orders hands by playability (suited connectors and wheel aces rank high) and is used when stacks are deep enough to see flops. `SHOVE_RANKING` orders hands by all-in equity against a random hand (offsuit high cards rank high) and is used for short-stack push/fold spots.
+1. **Two hand rankings, measured in real combos.** A hand's percentile is its share of all 1,326 starting combos counting it and every stronger hand (pairs are 6 combos, suited hands 4, offsuit 12), so the percentages below match real-world charts. `PLAY_RANKING` orders hands by playability (suited connectors and wheel aces rank high) and is used when stacks are deep enough to see flops. `SHOVE_RANKING` orders hands by all-in equity against a random hand (offsuit high cards rank high) and is used for short-stack push/fold spots.
 2. **Base frequencies.** `OPEN_PCT` gives how often each position opens at 100bb; `SHOVE_PCT` gives open-jam frequencies at ~12bb; `VS_OPEN_PCT` and `VS_OPEN_SHORT_PCT` give 3-bet / call / re-jam frequencies by the opener's position group.
 3. **Multipliers.** `HERO_VS_OPEN_MOD` adjusts for your own position (the BB defends wide, the SB mostly 3-bets or folds), `STACK_DEPTHS` tightens flat-calls at medium stacks, and `GAME_STAGES` applies tournament adjustments — wider opens once antes kick in, tighter calls under bubble and final-table ICM pressure, and shove ranges that widen as the stack shrinks.
 
 The thresholds are approximations of common charts, not solver output. All the numbers are at the top of `engine.js` if you want to tune them.
+
+## Range Charts (`charts.html`)
+
+A cheat sheet for positions and pre-flop ranges, computed live from `engine.js`, so it always matches the simulator, the chart check and the bots:
+
+- **Positions**: every seat's group, acting order before and after the flop, how often it opens, and what that seat means in practice.
+- **Opening ranges at a glance**: a 13×13 grid for each seat, folded to you at 100bb.
+- **Range explorer**: pick folded-to-you or facing a raise, your seat, the raiser, stack depth and game stage, and see the full raise / 3-bet / call / all-in / fold chart with its share of hands.
+- **Rules of thumb** for using them.
 
 ## Practice Table (`holdem.html`)
 
@@ -67,12 +76,13 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 
 ## Updating the hosted site
 
-GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=8`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
+GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=9`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
 
 ## Files
 
 ```
 index.html / app.js / style.css          Action Generator
+charts.html / charts.js / charts.css      Range Charts
 simulator.html / simulator.js / simulator.css   Simulator
 holdem.html / holdem.js / holdem.css      Practice Table
 bots.js                                   Practice Table bot styles, hand reading and post-flop decisions

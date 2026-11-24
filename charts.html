@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Texas Hold'em position guide and pre-flop range charts for every seat, stack depth and tournament stage." />
+    <title>Hold'em Range Charts</title>
+    <link rel="stylesheet" href="charts.css?v=9" />
+    <link rel="icon" type="image/png" href="casino.png" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="topbar">
+        <h1>Range Charts</h1>
+        <nav class="nav">
+          <a href="holdem.html">Practice Table</a>
+          <a href="simulator.html">Pre-Flop Simulator</a>
+          <a href="index.html">Action Generator</a>
+        </nav>
+      </header>
+      <p class="intro">Every chart on this page comes from the same range engine the simulator, the practice table's chart check and the bots use. Percentages are shares of all 1,326 starting hands.</p>
+
+      <section class="block" aria-labelledby="pos-title">
+        <h2 id="pos-title">Positions</h2>
+        <p class="lede">Your seat relative to the button decides how many players act after you. The more players behind you, the stronger your hand needs to be, because one of them will often have something better. Late position also means acting last after the flop, which is worth a lot.</p>
+        <div class="order">
+          <span><strong>Pre-flop order:</strong> UTG first, big blind last.</span>
+          <span><strong>After the flop:</strong> small blind first, button last.</span>
+          <span><strong>6-handed:</strong> LJ, HJ, CO, BTN, SB, BB (the LJ is called UTG there).</span>
+        </div>
+        <div class="table-wrap">
+          <table class="positions">
+            <thead>
+              <tr><th>Seat</th><th>Group</th><th class="num">Acts pre-flop</th><th class="num">Acts after flop</th><th class="num">Opens</th><th>What it means</th></tr>
+            </thead>
+            <tbody id="positions-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="glance-title">
+        <h2 id="glance-title">Opening ranges at a glance</h2>
+        <p class="lede">Folded to you, 100bb cash game. Green is a raise, dark is a fold. Watch the range grow as you move toward the button. Hover or tap a square to see the hand.</p>
+        <div class="glance" id="glance"></div>
+      </section>
+
+      <section class="block" aria-labelledby="ex-title">
+        <h2 id="ex-title">Range explorer</h2>
+        <form class="controls" onsubmit="return false">
+          <div class="field">
+            <label for="ex-spot">Situation</label>
+            <select id="ex-spot">
+              <option value="unopened">Folded to you</option>
+              <option value="facingRaise">Facing a raise</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ex-hero">Your seat</label>
+            <select id="ex-hero"></select>
+          </div>
+          <div class="field" id="field-opener">
+            <label for="ex-opener">Raiser</label>
+            <select id="ex-opener"></select>
+          </div>
+          <div class="field">
+            <label for="ex-stack">Stack</label>
+            <select id="ex-stack">
+              <option value="deep">Deep (100bb)</option>
+              <option value="mid">Medium (30bb)</option>
+              <option value="short">Short (12bb)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="ex-stage">Game</label>
+            <select id="ex-stage">
+              <option value="cash">Cash game</option>
+              <option value="early">Tournament · early</option>
+              <option value="mid">Tournament · middle</option>
+              <option value="late">Tournament · bubble</option>
+              <option value="final">Final table</option>
+            </select>
+          </div>
+        </form>
+        <div class="explorer-body">
+          <div id="ex-grid"></div>
+          <div class="explorer-side">
+            <div class="legend" id="ex-legend"></div>
+            <p class="summary" id="ex-summary"></p>
+            <p class="how">How to read the grid: pairs run down the diagonal (outlined). Suited hands are above it, offsuit hands below. Short stacks play all-in or fold, shown striped.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="rules-title">
+        <h2 id="rules-title">Rules of thumb</h2>
+        <ul class="rules">
+          <li><strong>Play tighter up front, wider on the button.</strong> UTG opens about <span id="rule-utg">15%</span> of hands; the button opens about <span id="rule-btn">45%</span>.</li>
+          <li><strong>Raise or fold, rarely limp.</strong> Raising first gives you two ways to win: everyone folds, or you have the best hand.</li>
+          <li><strong>Facing a raise, re-raise or fold more than you call.</strong> Calling is the weakest option, especially with offsuit hands that are often outkicked (QJo, KTo, A9o).</li>
+          <li><strong>Respect early-position raises.</strong> Their range is strong, so your continuing range has to be too.</li>
+          <li><strong>The big blind defends widest.</strong> You already have a bet in and close the action, so the price is good.</li>
+          <li><strong>Short stacks push or fold.</strong> Under about 15bb there's no room to raise and then fold. Shove the hands in the chart.</li>
+          <li><strong>Tighten up near the money.</strong> On the bubble and at final tables, survival is worth more than chips, so call off your stack less often.</li>
+        </ul>
+      </section>
+    </div>
+
+    <script src="engine.js?v=9"></script>
+    <script src="charts.js?v=9"></script>
+  </body>
+</html>
