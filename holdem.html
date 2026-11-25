@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Play full Texas Hold'em hands at a 9-handed practice table against bots with different playing styles, and get Claude's feedback on each hand." />
     <title>Hold'em Practice Table</title>
-    <link rel="stylesheet" href="holdem.css?v=12" />
+    <link rel="stylesheet" href="holdem.css?v=14" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
     <header class="topbar">
-      <h1>Practice Table <span class="version" title="If this doesn't say v12, reload the page">v12 · range view</span></h1>
+      <h1>Practice Table <span class="version" title="If this doesn't say v14, reload the page">v14 · compact options</span></h1>
       <nav class="nav">
         <a href="charts.html">Range Charts</a>
         <a href="simulator.html">Pre-Flop Simulator</a>
@@ -24,36 +24,36 @@
           <div class="field">
             <label for="set-mode">Game</label>
             <select id="set-mode">
-              <option value="cash">Cash game</option>
+              <option value="cash">Cash</option>
               <option value="tournament">Tournament</option>
             </select>
           </div>
           <div class="field">
             <label for="set-size">Players</label>
-            <select id="set-size">
-              <option value="9">9-handed (full ring)</option>
+            <select id="set-size" title="Varies: players leave and sit down between hands, 3 to 9 seats">
+              <option value="9">9-handed</option>
               <option value="6">6-handed</option>
-              <option value="varies">Varies (players come and go)</option>
+              <option value="varies">Varies</option>
             </select>
           </div>
           <div class="field" id="field-depth">
             <label for="set-depth">Buy-in</label>
             <select id="set-depth">
-              <option value="100">100bb (deep)</option>
-              <option value="40">40bb (medium)</option>
-              <option value="15">15bb (short)</option>
+              <option value="100">100bb</option>
+              <option value="40">40bb</option>
+              <option value="15">15bb</option>
             </select>
           </div>
           <div class="field" id="field-level">
-            <label for="set-level">Blinds go up every</label>
+            <label for="set-level">Blinds up</label>
             <select id="set-level">
-              <option value="6">6 hands (turbo)</option>
-              <option value="10" selected>10 hands</option>
-              <option value="15">15 hands</option>
+              <option value="6">Every 6</option>
+              <option value="10" selected>Every 10</option>
+              <option value="15">Every 15</option>
             </select>
           </div>
           <div class="field">
-            <label for="set-speed">Bot speed</label>
+            <label for="set-speed">Speed</label>
             <select id="set-speed">
               <option value="normal">Normal</option>
               <option value="fast">Fast</option>
@@ -124,9 +124,9 @@
       </aside>
     </main>
 
-    <script src="engine.js?v=12"></script>
-    <script src="bots.js?v=12"></script>
-    <script src="storage.js?v=12"></script>
-    <script src="holdem.js?v=12"></script>
+    <script src="engine.js?v=14"></script>
+    <script src="bots.js?v=14"></script>
+    <script src="storage.js?v=14"></script>
+    <script src="holdem.js?v=14"></script>
   </body>
 </html>
