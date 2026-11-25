@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Play-the-dealer Texas Hold'em trainer: Ante, Blind and Trips, bet 4x, 2x or 1x, and get every decision graded against basic strategy and exact river math." />
     <title>Dealer Hold'em</title>
-    <link rel="stylesheet" href="dealer.css?v=26" />
+    <link rel="stylesheet" href="dealer.css?v=27" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
@@ -66,6 +66,11 @@
           <div class="player-area">
             <div class="cards" id="player-cards"></div>
             <p class="hand-name you" id="player-hand"></p>
+            <div class="stack-plate" id="stack-plate">
+              <span class="stack-label">Your stack</span>
+              <span class="stack-amt" id="stack-amt"></span>
+              <span class="stack-sub" id="stack-sub"></span>
+            </div>
           </div>
         </div>
 
@@ -109,6 +114,6 @@
       </aside>
     </main>
 
-    <script src="dealer.js?v=26"></script>
+    <script src="dealer.js?v=27"></script>
   </body>
 </html>

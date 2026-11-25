@@ -101,6 +101,20 @@ select:focus-visible, .btn:focus-visible, .toggle button:focus-visible { outline
 .card.back { background: repeating-linear-gradient(45deg, #7a1f2b 0 4px, #8f2a37 4px 8px); border: 2px solid var(--card); }
 .card.slot { background: transparent; border: 1.5px dashed rgba(255, 255, 255, 0.2); box-shadow: none; }
 
+/* Your stack, at the rail under your cards */
+.stack-plate {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; justify-content: center;
+  margin-top: 4px; padding: 6px 14px; border-radius: 999px;
+  background: rgba(8, 16, 11, 0.72); border: 1px solid rgba(227, 179, 65, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+.stack-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--brass); }
+.stack-amt { font-size: 18px; font-weight: 700; color: #fff; }
+.stack-sub { font-size: 12px; color: #cfe4d6; }
+.stack-sub.pos { color: #9df0b6; }
+.stack-sub.neg { color: #ffb0a8; }
+.stack-plate.low { border-color: var(--loss); }
+
 /* Betting circles */
 .spots { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
 .spot {

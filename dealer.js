@@ -254,8 +254,24 @@
   function slotEl(size) { var n = el("div", "card slot " + (size || "")); n.setAttribute("aria-hidden", "true"); return n; }
 
   // ===== GAME FLOW =====
+  // Money on the table: your stack minus whatever is riding on the current hand
+  function inPlay() {
+    if (!game || game.stage === "done") return 0;
+    return game.ante + game.blind + game.trips + game.play;
+  }
+  function stackNow() { return stats.bank - inPlay(); }
+  function startCost() { return settings.ante * (settings.trips ? 3 : 2); }
+
+  function rebuy() {
+    stats.bank = START_BANK;
+    stats.rebuys = (stats.rebuys || 0) + 1;
+    save();
+    render();
+  }
+
   function deal() {
     if (game && game.stage !== "done") return;
+    if (stats.bank < startCost()) return;
     var ante = settings.ante;
     var deck = newDeck();
     game = {
@@ -278,6 +294,8 @@
 
   function choose(action) {
     if (!game || game.stage === "done") return;
+    var need = { bet4: 4, bet3: 3, bet2: 2, bet1: 1 }[action];
+    if (need && game.ante * need > stackNow()) return;
     var advice = adviceNow();
     var street = game.stage;
     // Pre-flop 3x and 4x both "bet": basic strategy always prefers 4x, so 3x counts as off-strategy
@@ -386,6 +404,17 @@
       you.textContent = game.shown === 0 ? describePreflop(game.player) : handName(evaluate(visible));
     }
 
+    var stack = stackNow();
+    $("stack-amt").textContent = money(stack);
+    var sub = $("stack-sub");
+    sub.className = "stack-sub";
+    if (game && !done) sub.textContent = money(inPlay()) + " in play";
+    else if (done) {
+      sub.textContent = "last hand " + signed(game.result.net);
+      if (game.result.net) sub.classList.add(game.result.net > 0 ? "pos" : "neg");
+    } else sub.textContent = "";
+    $("stack-plate").classList.toggle("low", (!game || done) && stack < startCost());
+
     var spots = { trips: game ? game.trips : (settings.trips ? settings.ante : 0), ante: game ? game.ante : settings.ante, blind: game ? game.blind : settings.ante, play: game ? game.play : 0 };
     var deltas = {};
     if (done) game.result.lines.forEach(function (l) { deltas[l.name.toLowerCase()] = l.delta; });
@@ -422,6 +451,8 @@
       b.type = "button";
       b.dataset.key = key;
       if (advice && advice.action === action) b.classList.add("suggested");
+      var need = { bet4: 4, bet3: 3, bet2: 2, bet1: 1 }[action];
+      if (need && game.ante * need > stackNow()) { b.disabled = true; b.title = "Not enough left in your stack"; }
       b.addEventListener("click", function () { choose(action); });
       row.append(b);
     }
@@ -431,9 +462,19 @@
       d.type = "button";
       d.id = "deal-btn";
       d.addEventListener("click", deal);
+      var short = stats.bank < startCost();
+      d.disabled = short;
       row.append(d);
-      note.textContent = "Ante " + money(settings.ante) + " + Blind " + money(settings.ante) + (settings.trips ? " + Trips " + money(settings.ante) : "") +
-        " = " + money(settings.ante * (settings.trips ? 3 : 2)) + " to start. Space deals.";
+      if (short) {
+        var rb = el("button", "btn", "Rebuy " + money(START_BANK));
+        rb.type = "button";
+        rb.addEventListener("click", rebuy);
+        row.append(rb);
+      }
+      note.textContent = short
+        ? "Your " + money(stats.bank) + " stack can't cover the " + money(startCost()) + " to start. Lower your Ante or turn off Trips, or rebuy."
+        : "Ante " + money(settings.ante) + " + Blind " + money(settings.ante) + (settings.trips ? " + Trips " + money(settings.ante) : "") +
+          " = " + money(startCost()) + " to start. Space deals.";
     } else if (game.stage === "preflop") {
       btn("Check", "check", "check", "1");
       btn("Bet 3× (" + money(game.ante * 3) + ")", "raise", "bet3", "2");
@@ -492,11 +533,11 @@
   function renderStats() {
     var dl = $("stats");
     dl.replaceChildren();
-    [["Bankroll", money(stats.bank)], ["Hands", String(stats.hands)], ["Net", stats.hands ? signed(stats.net) : "–"], ["On strategy", pct(stats.correct, stats.decisions)]]
+    [["Stack", money(stackNow())], ["Hands", String(stats.hands)], ["Net", stats.hands ? signed(stats.net) : "–"], ["On strategy", pct(stats.correct, stats.decisions)]]
       .forEach(function (t) { var d = el("div"); d.append(el("dt", null, t[0]), el("dd", null, t[1])); dl.append(d); });
     var bs = stats.byStreet;
     $("street-split").textContent = stats.decisions ? "Pre-flop " + pct(bs.preflop[0], bs.preflop[1]) + " · Flop " + pct(bs.flop[0], bs.flop[1]) + " · River " + pct(bs.river[0], bs.river[1]) +
-      (stats.hands ? " · Average per hand " + signed(stats.net / stats.hands) : "") : "";
+      (stats.hands ? " · Average per hand " + signed(stats.net / stats.hands) : "") + (stats.rebuys ? " · Rebuys " + stats.rebuys : "") : "";
     var log = $("hand-log");
     log.replaceChildren();
     stats.log.forEach(function (h, i) {
