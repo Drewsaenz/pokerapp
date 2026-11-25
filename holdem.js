@@ -789,7 +789,10 @@ function botPreflop(seat, ctx) {
 
 function heroAct(ctx) {
   var h = table.hand;
-  if (ctx.street === "preflop") h.pendingCheck = heroChartFor(ctx);
+  if (ctx.street === "preflop") {
+    h.pendingCheck = heroChartFor(ctx);
+    if (h.pendingCheck) h.pendingCheck.effBB = Math.round(effectiveStack(HERO_SEAT) / h.bb);
+  }
   return new Promise(function (resolve) {
     pendingHero = { ctx: ctx, resolve: resolve };
     renderControls();
@@ -801,7 +804,7 @@ function logHeroCheck(you) {
   var c = h.pendingCheck;
   h.pendingCheck = null;
   if (!c) return;
-  h.checks.push({ spot: c.spot, chart: c.action, you: you, explanation: c.explanation, limpers: c.limpers || 0 });
+  h.checks.push({ spot: c.spot, chart: c.action, you: you, explanation: c.explanation, limpers: c.limpers || 0, effBB: c.effBB });
 }
 
 function heroActsAfter(seat) {
@@ -1108,7 +1111,7 @@ function renderRangeView() {
   var side = el("div", "range-side");
   side.append(legend, yours);
   if (myChart && myChart.explanation) side.append(el("p", "range-why", myChart.explanation));
-  side.append(el("p", "fb-note", "Pairs run down the diagonal, suited hands above it, offsuit below. Your hand is outlined."));
+  side.append(el("p", "fb-note", "Pairs run down the diagonal, suited hands above it, offsuit below. Your hand is outlined. The action buttons use the same colors: blue is a 3-bet or 4-bet, striped purple is all-in."));
 
   var body = el("div", "range-body");
   body.append(grid, side);
@@ -1201,11 +1204,12 @@ function renderControls() {
   else addBtn("Call " + fmtBB(Math.min(ctx.toCall, me.stack), bb) + (me.stack <= ctx.toCall ? " (all-in)" : ""), "call", { type: "call" }, "c");
 
   var canRaise = maxTo > ctx.currentBet && me.stack > ctx.toCall;
-  var verb = ctx.currentBet === 0 ? "Bet" : "Raise to";
+  var reRaise = ctx.street === "preflop" && ctx.raises >= 1;
+  var verb = ctx.currentBet === 0 ? "Bet" : (reRaise ? (ctx.raises === 1 ? "3-bet to" : "4-bet to") : "Raise to");
   if (canRaise) {
     raisePresets(ctx).forEach(function (preset) {
       var amount = fmtBB(preset.to, bb);
-      addBtn(verb + " " + amount + (preset.label === amount ? "" : " (" + preset.label + ")"), "raise", { type: "raise", to: preset.to });
+      addBtn(verb + " " + amount + (preset.label === amount ? "" : " (" + preset.label + ")"), reRaise ? "threebet" : "raise", { type: "raise", to: preset.to });
     });
     addBtn("All-in " + fmtBB(maxTo, bb), "allin", { type: "raise", to: maxTo });
   }
@@ -1409,9 +1413,13 @@ function renderRest(h) {
 
 const AGGRESSIVE = ["Raise", "3-Bet", "4-Bet", "5-Bet", "All-In"];
 
-function checkVerdict(you, chart) {
+// Going all-in deep when the chart wants a normal raise risks the whole stack to win the blinds
+const DEEP_SHOVE_BB = 25;
+
+function checkVerdict(you, chart, effBB) {
   if (you === chart) return "match";
   if (you === "Check" && chart === "Fold") return "match";
+  if (you === "All-In" && ["Raise", "3-Bet", "4-Bet"].indexOf(chart) !== -1 && effBB > DEEP_SHOVE_BB) return "miss";
   if (AGGRESSIVE.indexOf(you) !== -1 && AGGRESSIVE.indexOf(chart) !== -1) return "close";
   if ((you === "Call" && chart === "All-In") || (you === "All-In" && chart === "Call")) return "close";
   return "miss";
@@ -1422,7 +1430,7 @@ function chartVerdict(h) {
   var list = h.checks || (h.heroChart && h.heroChart.action && h.heroFirst ? [{ chart: h.heroChart.action, you: h.heroFirst }] : []);
   if (!list.length) return null;
   var rank = { match: 0, close: 1, miss: 2 };
-  return list.map(function (c) { return checkVerdict(c.you, c.chart); })
+  return list.map(function (c) { return checkVerdict(c.you, c.chart, c.effBB); })
     .reduce(function (worst, v) { return rank[v] > rank[worst] ? v : worst; }, "match");
 }
 
@@ -1431,11 +1439,13 @@ function renderChartCheck(h) {
   var list = h.checks || (h.heroChart && h.heroChart.action ? [{ spot: "First decision", chart: h.heroChart.action, you: h.heroFirst }] : []);
   list.forEach(function (c) {
     if (!c.you) return;
-    var verdict = checkVerdict(c.you, c.chart);
+    var verdict = checkVerdict(c.you, c.chart, c.effBB);
     var chip = el("span", "chip " + verdict, verdict === "match" ? "Matches chart" : verdict === "close" ? "Close to chart" : "Off chart");
     var line = el("p", "chart-line");
+    var deepShove = c.you === "All-In" && verdict === "miss" && ["Raise", "3-Bet", "4-Bet"].indexOf(c.chart) !== -1;
     line.append(chip, el("span", "chart-spot", c.spot + ": "), document.createTextNode("you " + c.you.toLowerCase() + ", chart says " +
-      c.chart.toLowerCase() + (c.limpers ? " (chart assumes no limpers; there were " + c.limpers + ")" : "") + "."));
+      c.chart.toLowerCase() + (c.limpers ? " (chart assumes no limpers; there were " + c.limpers + ")" : "") + "." +
+      (deepShove ? " At " + c.effBB + "bb deep, shoving risks your whole stack where a normal-size " + c.chart.toLowerCase() + " does the job." : "")));
     box.append(line);
   });
 }
