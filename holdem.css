@@ -84,7 +84,7 @@ body {
   padding: 12px 14px;
 }
 
-.field { display: flex; flex-direction: column; gap: 4px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field label { font-size: 12px; color: var(--muted); }
 
 select, input {
@@ -460,6 +460,16 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
 }
 
 @media (max-width: 640px) {
+  .setup {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+    align-items: end;
+  }
+  .setup .field label { font-size: 11px; }
+  .setup select { width: 100%; padding: 6px 8px; font-size: 14px; }
+  .setup #new-session { grid-column: span 2; padding: 7px 10px; }
   .table-wrap { padding: 8px; }
   .felt { aspect-ratio: 3 / 4; border-radius: 46% / 50%; }
   .center { width: 70%; }
