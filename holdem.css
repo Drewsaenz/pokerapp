@@ -671,3 +671,4 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
 .link-btn { font: inherit; font-size: inherit; background: none; border: none; padding: 0; color: var(--brass); text-decoration: underline; cursor: pointer; }
 .controls-note.undone { color: var(--brass); }
 .btn.undo.armed { border-color: #d0645a; color: #f0a39b; outline-color: #d0645a; box-shadow: none; }
+.chart-split { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
