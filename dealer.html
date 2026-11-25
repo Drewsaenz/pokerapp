@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Play-the-dealer Texas Hold'em trainer: Ante, Blind and Trips, bet 4x, 2x or 1x, and get every decision graded against basic strategy and exact river math." />
+    <title>Dealer Hold'em</title>
+    <link rel="stylesheet" href="dealer.css?v=26" />
+    <link rel="icon" type="image/png" href="casino.png" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Dealer Hold'em <span class="version">trainer</span></h1>
+      <nav class="nav">
+        <a href="holdem.html">Practice Table</a>
+        <a href="charts.html">Range Charts</a>
+        <a href="simulator.html">Pre-Flop Simulator</a>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <section class="play">
+        <form class="setup" onsubmit="return false">
+          <div class="field">
+            <label for="set-ante">Ante</label>
+            <select id="set-ante">
+              <option value="5">$5</option>
+              <option value="10">$10</option>
+              <option value="25">$25</option>
+              <option value="50">$50</option>
+            </select>
+          </div>
+          <div class="field">
+            <span class="field-label" id="trips-label">Trips bet</span>
+            <div class="toggle" id="trips-toggle" role="group" aria-labelledby="trips-label">
+              <button type="button" data-v="off" aria-pressed="true">Off</button>
+              <button type="button" data-v="on" aria-pressed="false">On</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label" id="coach-label">Coach</span>
+            <div class="toggle" id="coach-toggle" role="group" aria-labelledby="coach-label" title="On: the strategy play is highlighted before you choose. Off: you're graded after the hand.">
+              <button type="button" data-v="on" aria-pressed="true">On</button>
+              <button type="button" data-v="off" aria-pressed="false">Off</button>
+            </div>
+          </div>
+        </form>
+
+        <div class="table">
+          <div class="dealer-area">
+            <span class="area-label">Dealer</span>
+            <div class="cards" id="dealer-cards"></div>
+            <p class="hand-name" id="dealer-hand"></p>
+          </div>
+          <div class="board-area">
+            <div class="cards" id="board"></div>
+            <p class="table-rule">Dealer qualifies with a pair or better · Blind pays on a straight or better</p>
+          </div>
+          <div class="spots">
+            <div class="spot trips" id="spot-trips"><span class="spot-name">Trips</span><span class="spot-amt"></span><span class="spot-res"></span></div>
+            <div class="spot" id="spot-ante"><span class="spot-name">Ante</span><span class="spot-amt"></span><span class="spot-res"></span></div>
+            <span class="equals" aria-hidden="true">=</span>
+            <div class="spot" id="spot-blind"><span class="spot-name">Blind</span><span class="spot-amt"></span><span class="spot-res"></span></div>
+            <div class="spot play" id="spot-play"><span class="spot-name">Play <span id="play-mult"></span></span><span class="spot-amt"></span><span class="spot-res"></span></div>
+          </div>
+          <div class="player-area">
+            <div class="cards" id="player-cards"></div>
+            <p class="hand-name you" id="player-hand"></p>
+          </div>
+        </div>
+
+        <div class="controls" id="controls" aria-live="polite"></div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <h2>This hand</h2>
+          <div id="feedback"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Session</h2>
+          <dl class="stats" id="stats"></dl>
+          <p class="street-split" id="street-split"></p>
+          <ul class="hand-log" id="hand-log"></ul>
+          <p class="muted" id="log-empty">Your hands show up here.</p>
+          <button type="button" class="btn ghost small" id="reset-stats">Reset bankroll and stats</button>
+        </section>
+
+        <section class="panel">
+          <h2>Basic strategy</h2>
+          <dl class="strategy">
+            <div><dt>Pre-flop · bet 4×</dt><dd>Any pair 3s and up · any ace · any suited king, K5 offsuit and up · Q6 suited and up, Q8 offsuit and up · J8 suited and up, JT offsuit. Never bet 3×. Otherwise check.</dd></div>
+            <div><dt>Flop · bet 2×</dt><dd>Two pair or better · any pair using your own card, except pocket 2s · four to a flush with a 10 or better of that suit in your hand. Otherwise check.</dd></div>
+            <div><dt>River · bet 1× or fold</dt><dd>Bet any made hand that uses your cards, or when fewer than 21 cards beat you as one of the dealer's. Otherwise fold.</dd></div>
+          </dl>
+        </section>
+
+        <section class="panel pays">
+          <div>
+            <h2>Blind pays</h2>
+            <table class="paytable" id="pay-blind"></table>
+          </div>
+          <div>
+            <h2>Trips pays</h2>
+            <table class="paytable" id="pay-trips"></table>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="dealer.js?v=26"></script>
+  </body>
+</html>

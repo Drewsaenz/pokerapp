@@ -82,6 +82,16 @@ A 9-handed table where you play full hands against eight bots, then get feedback
 
 Hands are evaluated in `holdem.js` (best five of seven, side pots, split pots). `engine.js` holds the shared pre-flop ranges and `bots.js` the bots' hand reading and decisions.
 
+## Dealer Hold'em (`dealer.html`)
+
+A trainer for the play-the-dealer hold'em table game you'll find in casinos, using its standard rules and pay tables. You play against the dealer, not other players:
+
+- Post equal **Ante** and **Blind** bets (plus an optional **Trips** side bet), and get two cards.
+- **Before the flop**: check, or bet 3× or 4× your Ante. **On the flop**: check or bet 2×. **On the river**: bet 1× or fold.
+- The dealer needs a pair or better to qualify. If not, your Ante pushes. The Play bet wins even money; the Blind pays only when you win with a straight or better (up to 500 to 1 for a royal); Trips pays on your own hand (three of a kind or better).
+
+Every decision is graded: before and on the flop against the standard basic strategy, and on the river against exact math (the page deals the dealer every possible two cards and compares the average result of betting with folding). Coach mode highlights the strategy play before you choose; turn it off to test yourself. The page keeps a play-money bankroll, your accuracy by street, and your last 25 hands in this browser. Played perfectly, the game costs about 2% of your Ante per hand.
+
 ## Hosting
 
 Everything is static, so any static host works. On GitHub Pages: **Settings → Pages → Deploy from a branch → `main` / `(root)`**. The site then lives at `https://<user>.github.io/pokerapp/`, with the Action Generator at the root and `simulator.html` and `holdem.html` beside it. `.nojekyll` tells Pages to serve the files as-is.
@@ -96,6 +106,7 @@ GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page
 
 ```
 index.html / app.js / style.css          Action Generator
+dealer.html / dealer.js / dealer.css      Dealer Hold'em
 charts.html / charts.js / charts.css      Range Charts
 simulator.html / simulator.js / simulator.css   Simulator
 holdem.html / holdem.js / holdem.css      Practice Table
