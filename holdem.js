@@ -306,10 +306,19 @@ function modeLabel(stage, mode) {
   return mode === "live" ? "Live $1/2" : GAME_STAGES[stage].label;
 }
 
-// Live card-room bots buy in for $200-$300
+// Live card-room bots buy in for $200-$300 (the room's max)
 function botBuyIn() {
   if (!isLive()) return startingStack();
   return randomInt(100, 150) * CASH_BLINDS.bb;
+}
+
+// Sitting down at a live game that's been running: about a third of the table has already
+// won, some of them $500 or more. Buy-ins and reloads are still capped at $300.
+function liveSeatStack() {
+  var roll = Math.random();
+  if (roll < 0.15) return randomInt(250, 450) * CASH_BLINDS.bb;
+  if (roll < 0.35) return randomInt(155, 245) * CASH_BLINDS.bb;
+  return botBuyIn();
 }
 
 function syncSettingsVisibility() {
@@ -398,7 +407,7 @@ function newSession() {
   table.players = [];
   var size = startingTableSize();
   for (var i = 0; i < size; i++) {
-    table.players.push(i === HERO_SEAT ? makePlayer("You", start, true) : makePlayer(nextBotName(), botBuyIn(), false));
+    table.players.push(i === HERO_SEAT ? makePlayer("You", start, true) : makePlayer(nextBotName(), isLive() ? liveSeatStack() : botBuyIn(), false));
   }
   table.button = randomInt(0, size - 1);
   $("session-review-out").replaceChildren();
@@ -548,8 +557,11 @@ async function playHand() {
   // Live rooms: the first seat after the blinds sometimes posts a $5 straddle and acts last pre-flop
   if (isLive() && seatCount() >= 4 && rand() < 0.3) {
     var straddler = actingOrder("preflop")[0];
-    if (players()[straddler].stack > b.bb * 10) {
-      table.hand.straddle = Math.round(b.bb * 2.5);
+    // Mostly $5, sometimes $10 or $20, like the Lodge streams
+    var roll = rand();
+    var size = Math.round(b.bb * (roll < 0.7 ? 2.5 : (roll < 0.9 ? 5 : 10)));
+    if (players()[straddler].stack > size * 8) {
+      table.hand.straddle = size;
       table.hand.straddleSeat = straddler;
       post(straddler, table.hand.straddle, "straddle");
     }
@@ -954,11 +966,37 @@ function limperCount() {
   }).length;
 }
 
-// Live open size: $10-15 (5-7.5bb), $20-30 over a straddle, plus $3-5 per limper
+// How many straddles a live open is: 4-6x a $5 straddle, about 3-4x a $10 or $20 one
+function straddleMult(h) {
+  return h.straddle > h.bb * 2.5 ? 3.25 : 4;
+}
+
+// Live open size: usually $10-15 (5-7.5bb), but a quarter of opens are $20-40 (Texas rooms
+// open big and still go multiway). Over a straddle, a multiple of it. Plus $3-5 per limper.
 function liveOpenTo() {
   var h = table.hand;
-  var base = h.straddle ? h.straddle * (4 + rand() * 2) : h.bb * (5 + rand() * 2.5);
+  var base = h.straddle ? h.straddle * (straddleMult(h) + rand() * 1.5)
+    : h.bb * (rand() < 0.25 ? 10 + rand() * 10 : 5 + rand() * 2.5);
   return Math.round(base + limperCount() * h.bb * (1.5 + rand()));
+}
+
+// Re-raise size (the pre-flop fundamentals): a 3-bet is about 3.25x in position, 4x out of position,
+// plus one more raise-size per caller; a 4-bet or more is about 2.4x in position, 2.65x out of it.
+function reraiseTo(seat, ctx) {
+  var ip = POSTFLOP_ORDER.indexOf(players()[seat].pos) > POSTFLOP_ORDER.indexOf(players()[ctx.lastRaiser].pos);
+  var callers = callersOfBet(seat, ctx);
+  if (ctx.raises === 1) return ctx.currentBet * ((ip ? 3.25 : 4) + callers);
+  return ctx.currentBet * ((ip ? 2.4 : 2.65) + 0.5 * callers);
+}
+
+// Did this seat limp before anyone raised? (A limp then a re-raise is usually AA, KK or AK.)
+function limpedFirst(seat) {
+  var acts = table.hand.actions.filter(function (a) { return a.street === "preflop" && a.type !== "post"; });
+  for (var i = 0; i < acts.length; i++) {
+    if (acts[i].type === "raise") return false;
+    if (acts[i].seat === seat && acts[i].type === "call") return true;
+  }
+  return false;
 }
 
 // Pairs, suited aces and suited connectors: hands that make big, hidden hands in multiway pots
@@ -1024,6 +1062,9 @@ function botPreflop(seat, ctx) {
     if (live && sc.stack !== "short") {
       // Stations raise only their best hands and limp the rest
       if (ctx.raises === 0 && rec === "Raise" && p.style === "CALL" && pPlay > 0.06) rec = "Call";
+      // Early on, a premium (AA, KK, AK) sometimes limps, planning to re-raise when someone raises
+      if (ctx.raises === 0 && rec === "Raise" && ["AA", "KK", "AKs", "AKo"].indexOf(hand) !== -1 &&
+          positionGroup(p.pos) !== "late" && p.pos !== "SB" && rand() < 0.25) rec = "Call";
       // Loose players limp in, and over-limp behind other limpers
       if (ctx.raises === 0 && rec === "Fold" && pPlay <= (LIVE_LIMP[p.style] || 0) + (limperCount() ? 0.08 : 0)) rec = "Call";
       // Passive players 3-bet only premiums (JJ+, AK); the rest of their 3-bets become calls
@@ -1040,12 +1081,7 @@ function botPreflop(seat, ctx) {
     if (rec === "All-In") return { type: "raise", to: maxTo };
     if (rec === "Call") return { type: "call" };
     if (rec === "Raise") return sizedRaise(seat, ctx, live && sc.stack !== "short" ? liveOpenTo() : bb * ((sc.stack === "short" ? 2.1 : 2.5) + limperCount()));
-    if (rec === "3-Bet") {
-      var callers = players().filter(function (x, s) {
-        return s !== ctx.lastRaiser && !x.folded && x.bet === ctx.currentBet;
-      }).length;
-      return sizedRaise(seat, ctx, ctx.currentBet * (3 + callers));
-    }
+    if (rec === "3-Bet") return sizedRaise(seat, ctx, reraiseTo(seat, ctx));
     if (ctx.toCall === 0) return { type: "check" };
     if (ctx.raises === 0 && p.pos === "SB" && limperCount() > 0 && pPlay <= 0.35) return { type: "call" };
     return { type: "fold" };
@@ -1101,7 +1137,7 @@ function heroActsAfter(seat) {
 // Live isolation size: $12-15 (4-5x a straddle) plus about $4 per limper
 function liveIsoSize() {
   var h = table.hand;
-  return Math.round((h.straddle ? h.straddle * 4 : h.bb * 6.5) + limperCount() * h.bb * 2);
+  return Math.round((h.straddle ? h.straddle * straddleMult(h) : h.bb * 6.5) + limperCount() * h.bb * 2);
 }
 
 // Live $1/2 adjustments on top of the online-style chart
@@ -1142,7 +1178,7 @@ function liveAdjust(base, sc, rec, ctx) {
         sc.hero + " even though an online chart opens them.";
       return out;
     }
-    if (rec.action === "Raise") out.explanation = rec.explanation + " Live sizing: open to about " + fmtChips(h.straddle ? h.straddle * 4 : h.bb * 6.5) + ".";
+    if (rec.action === "Raise") out.explanation = rec.explanation + " Live sizing: open to about " + fmtChips(h.straddle ? h.straddle * straddleMult(h) : h.bb * 6.5) + ".";
     return out;
   }
 
@@ -1156,11 +1192,17 @@ function liveAdjust(base, sc, rec, ctx) {
   // Deep in a live game, pairs (anywhere) and suited speculative hands (in position) can call to hit a big hand
   var setMine = sc.stackBB >= 100 && isSpeculative(hand) && (hand.length === 2 || late) && p <= 0.6;
   var speculativeCall = false;
+  var offsuitMultiway = false;
   if (p <= threeBet) out.action = "3-Bet";
+  else if (callers && offsuit) { out.action = "Fold"; offsuitMultiway = true; }
   else if (p <= callLine) out.action = "Call";
   else if (setMine) { out.action = "Call"; speculativeCall = true; }
   else out.action = "Fold";
-  if (!speculativeCall) {
+  if (offsuitMultiway) {
+    out.explanation = "Live $1/2: the " + sc.opener + " raised and " + callers + (callers === 1 ? " player has" : " players have") +
+      " already called. With a raise and a call in front, 3-bet or fold: offsuit hands like " + hand +
+      " flop one pair that's often dominated in a multiway pot, so don't cold-call them.";
+  } else if (!speculativeCall) {
     out.explanation = "Live $1/2: the " + sc.opener + " opened to " + fmtChips(ctx.currentBet) +
       (callers ? " and " + callers + (callers === 1 ? " player has" : " players have") + " already called" : "") +
       ". Big live opens and multiway pots shrink your calling range: 3-bet about the top " + pct(threeBet) +
@@ -1248,6 +1290,44 @@ function heroChartFor(ctx, handOverride) {
     };
   }
 
+  var premium = { AA: 1, KK: 1, AKs: 1, AKo: 1 };
+  if (ctx.raises === 2 && heroOpened && limpedFirst(ctx.lastRaiser)) {
+    var lr = players()[ctx.lastRaiser].pos;
+    var lrAction = hand === "AA" || hand === "KK" ? "4-Bet" : (hand === "QQ" || hand === "AKs" || hand === "AKo" ? "Call" : "Fold");
+    return {
+      spot: "Facing a limp-reraise",
+      action: lrAction,
+      explanation: "The " + lr + " limped, then re-raised your raise. A limp-reraise is almost always AA, KK or AK, a trap. " +
+        "4-bet only AA and KK, call with QQ and AK, and fold everything else, even hands that look good like AQ, AJ or JJ. " + hand + " is your hand."
+    };
+  }
+
+  if (ctx.raises === 2 && !heroOpened) {
+    var ipCold = heroActsAfter(ctx.lastRaiser);
+    var coldAction = premium[hand] ? "4-Bet" : (hand === "QQ" && ipCold ? "Call" : "Fold");
+    return {
+      spot: heroActions.length ? "Facing a 3-bet after you called" : "Facing a raise and a 3-bet",
+      action: coldAction,
+      explanation: "Someone raised and the " + players()[ctx.lastRaiser].pos + " 3-bet before it got back to you, so you're up against two strong ranges, " +
+        "and the first raiser can still have a monster. 4-bet only AA, KK and AK. QQ can call in position; fold it out of position. " +
+        "Fold everything else, JJ included, since it doesn't block aces or kings. " + hand + " is your hand." + stageNote
+    };
+  }
+
+  // Live, you opened and got 3-bet: live 3-bets are strong, so 4-bet only the very top and flat a few hands that play well
+  if (ctx.raises === 2 && heroOpened && h.live && Math.round(effectiveStack(HERO_SEAT) / h.bb) > 40) {
+    var ip3 = heroActsAfter(ctx.lastRaiser);
+    var flat = ip3 ? { QQ: 1, JJ: 1, TT: 1, 99: 1, AQs: 1, KQs: 1, AJs: 1 } : { QQ: 1, JJ: 1, AQs: 1 };
+    var act3 = premium[hand] ? "4-Bet" : (flat[hand] ? "Call" : "Fold");
+    return {
+      spot: "Facing a 3-bet after you opened",
+      action: act3,
+      explanation: "The " + players()[ctx.lastRaiser].pos + " 3-bet your open. Live players 3-bet mostly big pairs and AK, so 4-bet only AA, KK and AK, " +
+        "call with " + (ip3 ? "QQ-99, AQs, AJs and KQs since you'll have position" : "QQ, JJ and AQs out of position") +
+        ", and fold the rest, offsuit hands like AQ included. " + hand + " is your hand."
+    };
+  }
+
   if (ctx.raises === 2) {
     var cold = !heroOpened;
     var effBB = Math.round(effectiveStack(HERO_SEAT) / h.bb);
@@ -1255,7 +1335,11 @@ function heroChartFor(ctx, handOverride) {
     var ip = heroActsAfter(ctx.lastRaiser);
     var fourLine = (cold ? 0.03 : 0.035) * tight;
     var callBand = short ? 0 : (cold ? (ip ? 0.012 : 0) : (ip ? 0.07 : 0.04) * tight);
-    var action = pPlay <= fourLine ? (short ? "All-In" : "4-Bet") : (pPlay <= fourLine + callBand ? "Call" : "Fold");
+    // Live players 3-bet too few hands, so their 3-bets are strong: call less, and never with offsuit hands
+    var live3 = h.live && !short;
+    if (live3) callBand *= 0.6;
+    var offsuitHand = hand.length === 3 && hand[2] === "o";
+    var action = pPlay <= fourLine ? (short ? "All-In" : "4-Bet") : (pPlay <= fourLine + callBand && !(live3 && offsuitHand) ? "Call" : "Fold");
     var who = players()[ctx.lastRaiser].pos;
     return {
       spot: heroOpened ? "Facing a 3-bet after you opened" : (heroActions.length ? "Facing a 3-bet after you called" : "Facing a raise and a 3-bet"),
@@ -1265,7 +1349,7 @@ function heroChartFor(ctx, handOverride) {
           (callBand ? ", call the next " + pct(callBand) + " in position" : "") + ", and fold the rest."
         : "The " + who + " 3-bet your open. 4-bet about the top " + pct(fourLine) +
           (callBand ? ", call the next " + pct(callBand) + (ip ? " since you'll have position" : " out of position") : (short ? "; at " + effBB + "bb there's no room to call and play post-flop" : "")) +
-          ", and fold the rest.") +
+          ", and fold the rest." + (live3 ? " Live players 3-bet only strong hands, so fold more than an online chart would, and don't call with offsuit hands." : "")) +
         " " + hand + " is in the top " + pct(pPlay) + "." + stageNote
     };
   }
@@ -1289,10 +1373,11 @@ function raisePresets(ctx) {
   var list = [];
   if (ctx.street === "preflop") {
     if (ctx.raises === 0 && table.hand.live) {
-      // Live sizes: $12 / $15 (or 4x / 5x a straddle) plus $4 per limper
+      // Live sizes: $12 / $15 (or a multiple of the straddle) plus $4 per limper
       var unit = table.hand.straddle;
       var perLimper = limperCount() * bb * 2;
-      [unit ? unit * 4 : bb * 6, unit ? unit * 5 : bb * 7.5].forEach(function (to) {
+      var m = unit ? straddleMult(table.hand) : 0;
+      [unit ? unit * m : bb * 6, unit ? unit * (m + 1) : bb * 7.5].forEach(function (to) {
         to = Math.round(to + perLimper);
         list.push({ label: fmtChips(to), to: to });
       });
@@ -1301,8 +1386,11 @@ function raisePresets(ctx) {
       list.push({ label: "2.5bb", to: bb * (2.5 + limpers) });
       list.push({ label: "3bb", to: bb * (3 + limpers) });
     } else {
-      list.push({ label: "3×", to: ctx.currentBet * 3 });
-      list.push({ label: "4×", to: ctx.currentBet * 4 });
+      // Standard re-raise size for position and callers, plus a bigger option
+      var std = reraiseTo(HERO_SEAT, ctx);
+      var big = std + ctx.currentBet * (ctx.raises === 1 ? 1 : 0.5);
+      list.push({ label: "standard", to: std });
+      list.push({ label: "big", to: big });
     }
   } else if (ctx.currentBet === 0) {
     [["⅓ pot", 1 / 3], ["½ pot", 0.5], ["¾ pot", 0.75], ["Pot", 1]].forEach(function (f) {
@@ -2162,13 +2250,23 @@ function historyLines(h) {
   var pot = 0;
   var streetBet = 0;
   var street = "preflop";
+  // Track every stack through the hand, so bets that put someone all-in are labelled as such
+  var committed = h.seats.map(function () { return 0; });
+  var streetTo = h.seats.map(function () { return 0; });
+  var folded = h.seats.map(function () { return false; });
+  function behind(s) { return h.seats[s].stack - committed[s]; }
+  function label(s) { return s === HERO_SEAT ? "Hero" : h.seats[s].pos; }
   h.actions.forEach(function (a) {
     if (a.type === "street") {
       flush();
-      current = STREET_LABELS[a.street] + " [" + cardsText(a.board) + "] (pot " + fmtBB(a.pot, bb) + heroHolding(h, a) + ")";
+      var left = h.seats.map(function (x, s) { return s; }).filter(function (s) { return !folded[s]; })
+        .map(function (s) { return label(s) + " " + (behind(s) > 0 ? fmtBB(behind(s), bb) : "all-in"); });
+      current = STREET_LABELS[a.street] + " [" + cardsText(a.board) + "] (pot " + fmtBB(a.pot, bb) + heroHolding(h, a) +
+        "; stacks behind: " + left.join(", ") + ")";
       street = a.street;
       pot = a.pot;
       streetBet = 0;
+      streetTo = streetTo.map(function () { return 0; });
       return;
     }
     var who = a.isHero ? "Hero" : a.pos;
@@ -2180,7 +2278,22 @@ function historyLines(h) {
     } else if (a.type === "bet" && pot > 0) {
       text += " (" + Math.round((a.to / pot) * 100) + "% of the pot)";
     }
+    if (a.type === "bet" || a.type === "raise") {
+      // Opponents who can still call: if this bet already covers all of them, no bigger bet could win more
+      var opps = h.seats.map(function (x, s) { return s; }).filter(function (s) { return s !== a.seat && !folded[s] && behind(s) > 0; });
+      var covers = opps.length && opps.every(function (s) { return streetTo[s] + behind(s) <= a.to; });
+      if (covers) {
+        text += opps.length === 1
+          ? " (that is all of " + label(opps[0]) + "'s remaining " + fmtBB(streetTo[opps[0]] + behind(opps[0]), bb) + ", the most they can call; a bigger bet couldn't win more)"
+          : " (covers every remaining stack; a bigger bet couldn't win more)";
+      }
+    }
     pot += a.add || 0;
+    if (a.seat !== undefined && a.seat !== null) {
+      committed[a.seat] += a.add || 0;
+      if (a.type === "fold") folded[a.seat] = true;
+      if (a.type !== "post" || a.label !== "ante") streetTo[a.seat] = Math.max(streetTo[a.seat], a.to || 0);
+    }
     if (a.type !== "post" || a.label !== "ante") streetBet = Math.max(streetBet, a.to || 0);
     buffer.push(text);
   });
@@ -2224,6 +2337,7 @@ function handPrompt(h) {
     BOT_RULES,
     "Judge Hero's decisions as you would against real opponents, and note where the opponent's labelled style should change Hero's play (for example, value-bet thinner against a calling station, fold more to a tight-passive player's raise).",
     "Use only the cards shown. Each street's \"Hero has\" note states Hero's made hand and draws; do not credit Hero with draws or hands it doesn't list.",
+    "Each street lists the stacks behind. When a bet is marked as all of an opponent's remaining stack, its size was the most that could be called, so judge whether betting was right, not how big it was.",
     h.mode === "live" ? LIVE_RULES : "",
     "",
     historyText(h),
@@ -2245,6 +2359,7 @@ function sessionPrompt(hands) {
     BOT_RULES,
     hands.some(function (x) { return x.mode === "live"; }) ? LIVE_RULES : "",
     "Use only the cards shown. Each street's \"Hero has\" note states Hero's made hand and draws; do not credit Hero with draws or hands it doesn't list.",
+    "Each street lists the stacks behind. When a bet is marked as all of an opponent's remaining stack, its size was the most that could be called, so judge whether betting was right, not how big it was.",
     "",
     hands.map(historyText).join("\n\n"),
     "",

@@ -273,6 +273,9 @@ function botPostflop(seat, ctx) {
   var valueLine = opponents === 1 ? 0.62 : (opponents === 2 ? 0.48 : 0.4);
   var monsterLine = opponents === 1 ? 0.85 : (opponents === 2 ? 0.72 : 0.62);
   var sizeBoost = p.style === "LAG" ? 0.1 : 0;
+  // Live rooms: people don't fold, so everyone calls down a bit lighter and only the LAGs bluff much
+  var liveCall = h.live ? (p.style === "CALL" || p.style === "LAG" ? 0.05 : 0.03) : 0;
+  var liveBluff = h.live && p.style !== "LAG" ? 0.6 : 1;
 
   if (ctx.toCall === 0) {
     if (equity >= monsterLine && !river && wet < 1.5 && rand() < st.slowplay) return { type: "check" };
@@ -288,10 +291,10 @@ function botPostflop(seat, ctx) {
         rand() < st.cbet * (opponents === 1 ? 1 : 0.6)) {
       return betDecision(p, ctx, (wet >= 1.5 ? 0.5 : 0.33) + sizeBoost);
     }
-    if (!river && strongDraw && rand() < 0.45 * st.bluff) {
+    if (!river && strongDraw && rand() < 0.45 * st.bluff * liveBluff) {
       return betDecision(p, ctx, 0.6 + sizeBoost);
     }
-    var bluffRate = 0.12 * st.bluff * (ip ? 1.3 : 0.8) * (river ? 1.2 : 1);
+    var bluffRate = 0.12 * st.bluff * liveBluff * (ip ? 1.3 : 0.8) * (river ? 1.2 : 1);
     if (opponents === 1 && equity < 0.25 && rand() < bluffRate) {
       return betDecision(p, ctx, (river ? 0.75 : 0.6) + sizeBoost);
     }
@@ -301,7 +304,7 @@ function botPostflop(seat, ctx) {
   var required = ctx.toCall / (ctx.pot + ctx.toCall);
   var realize = river ? 1 : (ip ? 1 : 0.9);
   var implied = (!river && anyDraw && p.stack > ctx.toCall * 4) ? (strongDraw ? 0.08 : 0.04) : 0;
-  var effective = equity * realize + implied + st.callAdj;
+  var effective = equity * realize + implied + st.callAdj + liveCall;
   var canRaise = p.stack + p.bet > ctx.currentBet && p.stack > ctx.toCall;
 
   if (canRaise && equity >= monsterLine && rand() < st.raiseValue) return raiseDecision(p, ctx, 3);

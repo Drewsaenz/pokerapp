@@ -55,9 +55,11 @@ A cheat sheet for positions and pre-flop ranges, computed live from `engine.js`,
 A 9-handed table where you play full hands against eight bots, then get feedback on them.
 
 - **Games**: cash (100bb, 40bb or 15bb buy-in) or a tournament whose blinds rise every 6, 10 or 15 hands, moving through the early, middle (big-blind ante), bubble and final-table stages. Busted bots are replaced so the table stays full.
-- **Live $1/2 mode**: simulates a live Texas card room. Bots buy in for $200-$300, open to $10-15 ($20-30 over a straddle) plus $3-5 per limper, limp and limp-call a lot, call raises wide (so pots go multiway), and the table leans heavily toward calling stations and loose players. About 30% of hands have a $5 straddle that acts last pre-flop. Passive players 3-bet only premiums and size post-flop bets by strength. Your chart check and range view switch to live advice: bigger opens, isolation raises over limpers, over-limping speculative hands, folding dominated offsuit hands early, tighter calls against big multiway opens, and set-mining deep.
+- **Live $1/2 mode**: simulates a live Texas card room (tuned from Lodge, Texas Card House and Austin vlog footage). Bots buy in for $200-$300 (the max), but you sit down at a game that's been running: about a third of the table has already won, some with $500-900 stacks. Open to $10-15 most of the time and $20-40 about a quarter of the time (a multiple of the straddle when there is one) plus $3-5 per limper, sometimes limp AA/KK/AK early to re-raise, call down lighter and bluff less (except the LAGs), and straddle $5 most of the time, sometimes $10 or $20; limp and limp-call a lot, call raises wide (so pots go multiway), and the table leans heavily toward calling stations and loose players. About 30% of hands have a $5 straddle that acts last pre-flop. Passive players 3-bet only premiums and size post-flop bets by strength. Your chart check and range view switch to live advice: bigger opens, isolation raises over limpers, over-limping speculative hands, folding dominated offsuit hands early, tighter calls against big multiway opens, and set-mining deep.
 - **Your seat**: leave it on "Rotates" for normal play, or lock yourself into one position (UTG through the big blind) to drill it hand after hand. It applies from the next hand, mid-session. On short tables, seats that don't exist (UTG at 6-handed) fall back to first to act.
 - **Table size**: 9-handed, 6-handed, or "Varies", where (in cash games) players leave and sit down between hands, anywhere from 3 to 9. Short-handed tables drop the earliest positions, so 6-handed runs LJ, HJ, CO, BTN, SB, BB with those seats' ranges.
+- **Re-raise sizes**: 3-bet buttons are about 3.25× the raise in position and 4× out of position, plus one more raise-size per caller; 4-bets are about 2.4× in position and 2.65× out of it, each with a bigger option. Bots use the same sizes.
+- **Tight spots in the chart**: facing a raise and a 3-bet, 4-bet only AA, KK and AK (QQ calls in position); facing a limp-reraise, 4-bet AA and KK, call QQ and AK, fold the rest; in Live mode after your open is 3-bet, 4-bet AA, KK and AK, call a few pairs and suited Broadways, and fold offsuit hands; and with a raise and a call in front of you, 3-bet or fold offsuit hands.
 - **Bots** each have a style shown on their seat: TAG (tight-aggressive), LAG (loose-aggressive), Nit (tight-passive) or Station (calling station). Pre-flop they play the simulator's chart ranges, widened or narrowed by style. Post-flop (`bots.js`) they:
   - estimate each opponent's range from that opponent's actions in the hand (an open, a 3-bet, a call, bets on earlier streets),
   - simulate a few hundred run-outs against those ranges to get their equity, without ever seeing your cards,
@@ -74,11 +76,22 @@ A 9-handed table where you play full hands against eight bots, then get feedback
 - **Misclick guard**: pre-flop calls and raises the chart says to fold, and any move that puts in 25bb or more, need a second tap (the button lights up and says why). Turn it off with the "Misclick guard" link under the action buttons.
 - **See the rest of the hand**: when a hand ends without a showdown, reveal the cards that would have come next, everyone's hole cards, and who would have won if it had been checked down. It's hindsight, so it isn't sent to Claude reviews.
 - **Hand archive**: every hand is kept as its written history (plus any review) until you erase it. "Download all hands" saves a .txt file and "Copy all hands" copies it, ready to paste into a Claude chat. In the Claude version the archive lives on your Claude account where the page's owner can read it, so Claude can pull your hands into a chat for review.
+- **Stack-aware reviews**: the hand history sent to Claude lists everyone's stack behind on each street and marks a bet that puts the last opponent all-in, so a review judges whether to bet, not why the bet was "small".
 - **Review grades**: Excellent, Good, Okay, Questionable, Mistake or Big mistake, color-coded in the review and the hand list.
 - **Saved progress** (`storage.js`): your table, every session's results, a results chart and your last 100 hands survive closing the page. On the hosted site they're saved in that browser (each device keeps its own). Opened as a Claude artifact, they're saved privately to your Claude account (last 40 hands) and follow you across devices.
 - **Claude feedback**: opened as a Claude artifact, the page can send a hand (or your last 10) to Claude and show a review in the page. Anywhere else, use "Copy hand history" and paste it into a chat.
 
 Hands are evaluated in `holdem.js` (best five of seven, side pots, split pots). `engine.js` holds the shared pre-flop ranges and `bots.js` the bots' hand reading and decisions.
+
+## Dealer Hold'em (`dealer.html`)
+
+A trainer for the play-the-dealer hold'em table game you'll find in casinos, using its standard rules and pay tables. You play against the dealer, not other players:
+
+- Post equal **Ante** and **Blind** bets (plus an optional **Trips** side bet), and get two cards.
+- **Before the flop**: check, or bet 3× or 4× your Ante. **On the flop**: check or bet 2×. **On the river**: bet 1× or fold.
+- The dealer needs a pair or better to qualify. If not, your Ante pushes. The Play bet wins even money; the Blind pays only when you win with a straight or better (up to 500 to 1 for a royal); Trips pays on your own hand (three of a kind or better).
+
+Every decision is graded: before and on the flop against the standard basic strategy, and on the river against exact math (the page deals the dealer every possible two cards and compares the average result of betting with folding). Coach mode highlights the strategy play before you choose; turn it off to test yourself. Keys: Space deals, C checks, F folds, B bets (4× before the flop, 2× on the flop, 1× on the river) and T bets 3×. Your stack sits on the table under your cards: it drops as you bet, shows what's in play, then the last hand's result; bets you can't cover are disabled, and you can rebuy when you run out. Pick your buy-in ($100 to $1,000, $300 by default); it applies to rebuys and to "New session", which starts your stack and stats over. The page keeps your accuracy by street, and your last 25 hands in this browser. Played perfectly, the game costs about 2% of your Ante per hand.
 
 ## Hosting
 
@@ -88,12 +101,13 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 
 ## Updating the hosted site
 
-GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=24`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
+GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=27`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
 
 ## Files
 
 ```
 index.html / app.js / style.css          Action Generator
+dealer.html / dealer.js / dealer.css      Dealer Hold'em
 charts.html / charts.js / charts.css      Range Charts
 simulator.html / simulator.js / simulator.css   Simulator
 holdem.html / holdem.js / holdem.css      Practice Table
