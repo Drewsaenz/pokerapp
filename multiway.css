@@ -1,0 +1,60 @@
+/* Multiway Drill: builds on dealer.css (tokens, cards, buttons, panels). The felt shows the field in
+   acting order across the top, the flop in the middle, and your hand at the rail. */
+.mw-table {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  padding: 16px 14px 22px; border-radius: 18px;
+  background: radial-gradient(ellipse at 50% 40%, var(--felt-1) 0%, var(--felt-2) 60%, var(--felt-3) 100%);
+  box-shadow: inset 0 0 0 10px var(--rail), inset 0 0 40px rgba(0, 0, 0, 0.55);
+}
+.spot-line { margin: 0; font-size: 13px; color: #e6f1e9; text-align: center; }
+.opponents { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; }
+.opp {
+  width: 112px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: rgba(10, 18, 13, 0.9); border: 1px solid var(--line); border-radius: 10px; padding: 7px 6px;
+}
+.opp-head { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
+.opp-head strong { font-size: 13px; }
+.opp-pos { font-size: 11px; color: var(--muted); }
+.opp-style { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; background: #2a3d31; color: #cfe4d6; }
+.opp-style.call { background: rgba(217, 134, 43, 0.25); color: #f3c38a; }
+.opp-style.lag { background: rgba(138, 98, 201, 0.28); color: #cdb6f2; }
+.opp-style.tag { background: rgba(63, 127, 196, 0.28); color: #a9cbf2; }
+.opp-style.nit { background: rgba(156, 178, 164, 0.2); color: #cfe4d6; }
+.opp-cards { display: flex; gap: 3px; min-height: 42px; align-items: center; }
+.opp-act { font-size: 12px; color: #ffe9a8; text-align: center; line-height: 1.3; }
+.opp-has { font-size: 11px; color: #cfe4d6; text-align: center; }
+.opp.lead { border-color: var(--brass); box-shadow: 0 0 0 2px rgba(227, 179, 65, 0.35); }
+.opp.fold { opacity: 0.45; }
+.opp.behind .opp-act { color: var(--muted); }
+
+.card.sm { width: 30px; height: 42px; border-radius: 5px; }
+.card.sm .card-rank { font-size: 14px; }
+.card.sm .card-suit { font-size: 13px; }
+.card.runout { opacity: 0.9; box-shadow: 0 0 0 2px rgba(227, 179, 65, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4); }
+.mw-board, .mw-hero { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+
+.btn.call { background: var(--call); color: #1d1204; }
+.btn.best { box-shadow: 0 0 0 3px var(--win); }
+.btn.picked { outline: 2px solid #fff; outline-offset: 2px; }
+.btn:disabled { cursor: default; }
+.btn:disabled:not(.best):not(.picked) { opacity: 0.45; }
+
+.result-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.result-head .result-title { font-size: 18px; font-weight: 700; }
+.result-head.right .result-title { color: var(--win); }
+.result-head.close .result-title { color: var(--brass); }
+.result-head.wrong .result-title { color: var(--loss); }
+.result-sub { font-size: 13px; color: var(--muted); }
+.nums { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.nums div { background: var(--panel-2); border-radius: 8px; padding: 7px 9px; min-width: 0; }
+.nums dt { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+.nums dd { margin: 2px 0 0; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.why { margin: 0; font-size: 13px; line-height: 1.5; }
+.muted.small { font-size: 11px; }
+
+@media (max-width: 520px) {
+  .mw-table { padding: 12px 8px 18px; gap: 10px; }
+  .opponents { gap: 6px; }
+  .opp { width: calc(33.333% - 4px); padding: 6px 4px; }
+  .opp-act { font-size: 11px; }
+}

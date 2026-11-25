@@ -84,6 +84,12 @@ A 9-handed table where you play full hands against eight bots, then get feedback
 
 Hands are evaluated in `holdem.js` (best five of seven, side pots, split pots). `engine.js` holds the shared pre-flop ranges and `bots.js` the bots' hand reading and decisions.
 
+## Multiway Drill (`multiway.html`)
+
+The live $1/2 spot most training skips: you raised before the flop, two to seven players called, and the flop is out. Either someone leads into you (a third of the pot, half or full pot) and others call or fold before it's your turn, or it's checked to you. You choose fold / call / raise, or check / bet half / bet pot.
+
+Each opponent has a live style (mostly calling stations and loose players). Their hands are drawn from what fits their pre-flop call and their action on this flop: a full-pot lead from a Station is mostly two pair or better, sets and big draws; a LAG's lead is much wider. The grade compares your equity against everyone still in (Monte Carlo, with players behind you counted only when they'd call) to the price, discounted when players behind can still raise. The breakdown shows your equity, your fair share of the pot, the equity needed, your equity against the leader alone, and what the leader's bet represents. Then the turn, river and everyone's cards show one way it could have finished. Filters: number of callers, spot type, and your hand (overpair or top pair).
+
 ## Dealer Hold'em (`dealer.html`)
 
 A trainer for the play-the-dealer hold'em table game you'll find in casinos, using its standard rules and pay tables. You play against the dealer, not other players:
@@ -102,13 +108,14 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 
 ## Updating the hosted site
 
-GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=28`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
+GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=29`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
 
 ## Files
 
 ```
 index.html / app.js / style.css          Action Generator
 dealer.html / dealer.js / dealer.css      Dealer Hold'em
+multiway.html / multiway.js / multiway.css   Multiway Drill (uses dealer.css too)
 charts.html / charts.js / charts.css      Range Charts
 simulator.html / simulator.js / simulator.css   Simulator
 holdem.html / holdem.js / holdem.css      Practice Table
