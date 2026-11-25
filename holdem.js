@@ -536,7 +536,8 @@ async function playHand() {
     practice: !!replay,
     replayOf: replay ? replay.no : null,
     source: replay || null,
-    heroActed: false
+    heroActed: false,
+    unassisted: !hintsOn
   };
   table.viewing = table.hand;
   table.notice = "";
@@ -593,7 +594,7 @@ function guardReason(d) {
   var me = players()[HERO_SEAT];
   var cost = d.type === "call" ? Math.min(ctx.toCall, me.stack) : d.to - me.bet;
   if (cost <= 0) return null;
-  if (ctx.street === "preflop" && cost >= ctx.bb) {
+  if (hintsOn && ctx.street === "preflop" && cost >= ctx.bb) {
     var chart = heroChartFor(ctx);
     if (chart && chart.action === "Fold") return "The chart says fold here.";
   }
@@ -1448,6 +1449,9 @@ const RANGE_STYLE = {
   "All-In": ["r-allin", "All-in"], "Call": ["r-call", "Call"], "Check": ["r-check", "Check"], "Fold": ["r-fold", "Fold"]
 };
 let rangeOpen = false;
+// Chart help while playing (mini chart, range view, chart reasons in the guard). Off = unassisted.
+var hintsOn = true;
+try { hintsOn = localStorage.getItem("pokerapp.hints") !== "off"; } catch (e) { /* default on */ }
 
 function rangeHandAt(r, c) {
   if (r === c) return RANGE_RANKS[r] + RANGE_RANKS[c];
@@ -1481,7 +1485,7 @@ function renderMiniRange() {
   var box = $("mini-range");
   var ctx = pendingHero && pendingHero.ctx;
   box.replaceChildren();
-  if (!ctx || ctx.street !== "preflop") { box.hidden = true; return; }
+  if (!hintsOn || !ctx || ctx.street !== "preflop") { box.hidden = true; return; }
   box.hidden = false;
   var data = rangeData(ctx);
   var myAction = data.myChart ? data.myChart.action : "Fold";
@@ -1502,7 +1506,7 @@ function renderRangeView() {
   var ctx = pendingHero && pendingHero.ctx;
   renderMiniRange();
   box.replaceChildren();
-  if (!rangeOpen || !ctx || ctx.street !== "preflop") { box.hidden = true; return; }
+  if (!hintsOn || !rangeOpen || !ctx || ctx.street !== "preflop") { box.hidden = true; return; }
   box.hidden = false;
 
   var me = players()[HERO_SEAT];
@@ -1704,7 +1708,7 @@ function renderControls() {
     });
     box.append(form);
   }
-  if (ctx.street === "preflop") {
+  if (ctx.street === "preflop" && hintsOn) {
     var rangeBtn = el("button", "btn ghost small range-toggle", rangeOpen ? "Hide range" : "Range view");
     rangeBtn.type = "button";
     rangeBtn.dataset.key = "r";
@@ -1719,7 +1723,7 @@ function renderControls() {
     var armedWhy = guardArmedReason();
     box.insertBefore(el("p", "guard-note", (armedWhy ? armedWhy + " " : "") + "Tap the highlighted button again to confirm, or pick something else."), row);
   }
-  var note = el("p", "controls-note", "Keys: F fold · C check or call" + (ctx.street === "preflop" ? " · R range view" : "") + " · ");
+  var note = el("p", "controls-note", "Keys: F fold · C check or call" + (ctx.street === "preflop" && hintsOn ? " · R range view" : "") + " · ");
   var gt = el("button", "link-btn", "Misclick guard: " + (guardOn ? "on" : "off"));
   gt.type = "button";
   gt.title = "When on, off-chart pre-flop calls and raises, and anything over 25bb, need a second tap.";
@@ -2723,6 +2727,15 @@ function renderSession() {
     d.append(el("dt", null, t[0]), el("dd", null, t[1]));
     stats.append(d);
   });
+  // With the chart vs without it, once there are unassisted hands to compare
+  var split = $("chart-split");
+  if (!split) { split = el("p", "chart-split"); split.id = "chart-split"; stats.after(split); }
+  var solo = charted.filter(function (h) { return h.unassisted; });
+  var helped = charted.filter(function (h) { return !h.unassisted; });
+  function pct(list) { return Math.round(list.filter(function (h) { return chartVerdict(h) !== "miss"; }).length / list.length * 100) + "%"; }
+  split.hidden = !solo.length;
+  split.textContent = solo.length ? "On chart without the chart: " + pct(solo) + " (" + solo.length + " hand" + (solo.length === 1 ? "" : "s") + ")" +
+    (helped.length ? " · with it: " + pct(helped) + " (" + helped.length + ")" : "") : "";
 
   var sessionBtn = $("review-session");
   sessionBtn.hidden = sampleState !== "ready";
@@ -2792,6 +2805,27 @@ function renderUnitToggle() {
     if (b.dataset.unit === "money") b.textContent = tournament ? "Chips" : "$";
   });
 }
+
+function renderHintToggle() {
+  document.querySelectorAll("#hint-toggle button").forEach(function (b) {
+    var on = (b.dataset.hints === "on") === hintsOn;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+renderHintToggle();
+document.querySelectorAll("#hint-toggle button").forEach(function (b) {
+  b.addEventListener("click", function () {
+    hintsOn = b.dataset.hints === "on";
+    try { localStorage.setItem("pokerapp.hints", hintsOn ? "on" : "off"); } catch (e) { /* this visit only */ }
+    // Peeking mid-hand means that hand doesn't count as unassisted
+    if (hintsOn && table.hand && !table.hand.done) table.hand.unassisted = false;
+    if (!hintsOn) rangeOpen = false;
+    guardArmed = null;
+    renderHintToggle();
+    renderControls();
+  });
+});
 
 document.querySelectorAll("#unit-toggle button").forEach(function (b) {
   b.addEventListener("click", function () {
