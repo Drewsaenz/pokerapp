@@ -76,6 +76,7 @@ A 9-handed table where you play full hands against eight bots, then get feedback
 - **Misclick guard**: pre-flop calls and raises the chart says to fold, and any move that puts in 25bb or more, need a second tap (the button lights up and says why). Turn it off with the "Misclick guard" link under the action buttons.
 - **See the rest of the hand**: when a hand ends without a showdown, reveal the cards that would have come next, everyone's hole cards, and who would have won if it had been checked down. It's hindsight, so it isn't sent to Claude reviews.
 - **Hand archive**: every hand is kept as its written history (plus any review) until you erase it. "Download all hands" saves a .txt file and "Copy all hands" copies it, ready to paste into a Claude chat. In the Claude version the archive lives on your Claude account where the page's owner can read it, so Claude can pull your hands into a chat for review.
+- **Stack-aware reviews**: the hand history sent to Claude lists everyone's stack behind on each street and marks a bet that puts the last opponent all-in, so a review judges whether to bet, not why the bet was "small".
 - **Review grades**: Excellent, Good, Okay, Questionable, Mistake or Big mistake, color-coded in the review and the hand list.
 - **Saved progress** (`storage.js`): your table, every session's results, a results chart and your last 100 hands survive closing the page. On the hosted site they're saved in that browser (each device keeps its own). Opened as a Claude artifact, they're saved privately to your Claude account (last 40 hands) and follow you across devices.
 - **Claude feedback**: opened as a Claude artifact, the page can send a hand (or your last 10) to Claude and show a review in the page. Anywhere else, use "Copy hand history" and paste it into a chat.
@@ -100,7 +101,7 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 
 ## Updating the hosted site
 
-GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=26`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
+GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=27`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
 
 ## Files
 

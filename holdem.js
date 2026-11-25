@@ -2250,13 +2250,23 @@ function historyLines(h) {
   var pot = 0;
   var streetBet = 0;
   var street = "preflop";
+  // Track every stack through the hand, so bets that put someone all-in are labelled as such
+  var committed = h.seats.map(function () { return 0; });
+  var streetTo = h.seats.map(function () { return 0; });
+  var folded = h.seats.map(function () { return false; });
+  function behind(s) { return h.seats[s].stack - committed[s]; }
+  function label(s) { return s === HERO_SEAT ? "Hero" : h.seats[s].pos; }
   h.actions.forEach(function (a) {
     if (a.type === "street") {
       flush();
-      current = STREET_LABELS[a.street] + " [" + cardsText(a.board) + "] (pot " + fmtBB(a.pot, bb) + heroHolding(h, a) + ")";
+      var left = h.seats.map(function (x, s) { return s; }).filter(function (s) { return !folded[s]; })
+        .map(function (s) { return label(s) + " " + (behind(s) > 0 ? fmtBB(behind(s), bb) : "all-in"); });
+      current = STREET_LABELS[a.street] + " [" + cardsText(a.board) + "] (pot " + fmtBB(a.pot, bb) + heroHolding(h, a) +
+        "; stacks behind: " + left.join(", ") + ")";
       street = a.street;
       pot = a.pot;
       streetBet = 0;
+      streetTo = streetTo.map(function () { return 0; });
       return;
     }
     var who = a.isHero ? "Hero" : a.pos;
@@ -2268,7 +2278,22 @@ function historyLines(h) {
     } else if (a.type === "bet" && pot > 0) {
       text += " (" + Math.round((a.to / pot) * 100) + "% of the pot)";
     }
+    if (a.type === "bet" || a.type === "raise") {
+      // Opponents who can still call: if this bet already covers all of them, no bigger bet could win more
+      var opps = h.seats.map(function (x, s) { return s; }).filter(function (s) { return s !== a.seat && !folded[s] && behind(s) > 0; });
+      var covers = opps.length && opps.every(function (s) { return streetTo[s] + behind(s) <= a.to; });
+      if (covers) {
+        text += opps.length === 1
+          ? " (that is all of " + label(opps[0]) + "'s remaining " + fmtBB(streetTo[opps[0]] + behind(opps[0]), bb) + ", the most they can call; a bigger bet couldn't win more)"
+          : " (covers every remaining stack; a bigger bet couldn't win more)";
+      }
+    }
     pot += a.add || 0;
+    if (a.seat !== undefined && a.seat !== null) {
+      committed[a.seat] += a.add || 0;
+      if (a.type === "fold") folded[a.seat] = true;
+      if (a.type !== "post" || a.label !== "ante") streetTo[a.seat] = Math.max(streetTo[a.seat], a.to || 0);
+    }
     if (a.type !== "post" || a.label !== "ante") streetBet = Math.max(streetBet, a.to || 0);
     buffer.push(text);
   });
@@ -2312,6 +2337,7 @@ function handPrompt(h) {
     BOT_RULES,
     "Judge Hero's decisions as you would against real opponents, and note where the opponent's labelled style should change Hero's play (for example, value-bet thinner against a calling station, fold more to a tight-passive player's raise).",
     "Use only the cards shown. Each street's \"Hero has\" note states Hero's made hand and draws; do not credit Hero with draws or hands it doesn't list.",
+    "Each street lists the stacks behind. When a bet is marked as all of an opponent's remaining stack, its size was the most that could be called, so judge whether betting was right, not how big it was.",
     h.mode === "live" ? LIVE_RULES : "",
     "",
     historyText(h),
@@ -2333,6 +2359,7 @@ function sessionPrompt(hands) {
     BOT_RULES,
     hands.some(function (x) { return x.mode === "live"; }) ? LIVE_RULES : "",
     "Use only the cards shown. Each street's \"Hero has\" note states Hero's made hand and draws; do not credit Hero with draws or hands it doesn't list.",
+    "Each street lists the stacks behind. When a bet is marked as all of an opponent's remaining stack, its size was the most that could be called, so judge whether betting was right, not how big it was.",
     "",
     hands.map(historyText).join("\n\n"),
     "",
