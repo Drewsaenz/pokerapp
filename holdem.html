@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Play full Texas Hold'em hands at a 9-handed practice table against bots with different playing styles, and get Claude's feedback on each hand." />
     <title>Hold'em Practice Table</title>
-    <link rel="stylesheet" href="holdem.css?v=19" />
+    <link rel="stylesheet" href="holdem.css?v=23" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
     <header class="topbar">
-      <h1>Practice Table <span class="version" title="If this doesn't say v19, reload the page">v19 · accurate reviews</span></h1>
+      <h1>Practice Table <span class="version" title="If this doesn't say v23, reload the page">v23 · undo + misclick guard</span></h1>
       <nav class="nav">
         <a href="charts.html">Range Charts</a>
         <a href="simulator.html">Pre-Flop Simulator</a>
@@ -55,6 +55,21 @@
             </select>
           </div>
           <div class="field">
+            <label for="set-seat">Your seat</label>
+            <select id="set-seat" title="Lock your position to practice one seat. Takes effect on the next hand.">
+              <option value="rotate">Rotates</option>
+              <option value="UTG">UTG</option>
+              <option value="UTG+1">UTG+1</option>
+              <option value="UTG+2">UTG+2</option>
+              <option value="LJ">Lojack</option>
+              <option value="HJ">Hijack</option>
+              <option value="CO">Cutoff</option>
+              <option value="BTN">Button</option>
+              <option value="SB">Small blind</option>
+              <option value="BB">Big blind</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="set-speed">Speed</label>
             <select id="set-speed">
               <option value="normal">Normal</option>
@@ -79,6 +94,7 @@
               <p class="pot" id="pot"></p>
               <div class="board" id="board"></div>
               <p class="stage-line" id="stage-line">9-handed · you sit at the bottom</p>
+              <p class="you-have" id="you-have" hidden aria-live="polite"></p>
             </div>
           </div>
         </div>
@@ -135,9 +151,9 @@
       </aside>
     </main>
 
-    <script src="engine.js?v=19"></script>
-    <script src="bots.js?v=19"></script>
-    <script src="storage.js?v=19"></script>
-    <script src="holdem.js?v=19"></script>
+    <script src="engine.js?v=23"></script>
+    <script src="bots.js?v=23"></script>
+    <script src="storage.js?v=23"></script>
+    <script src="holdem.js?v=23"></script>
   </body>
 </html>

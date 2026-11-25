@@ -262,6 +262,25 @@ function archiveUpdate(id, patch) {
   });
 }
 
+// Drops one hand (the last one played) from the archive, for Undo last hand
+function archiveRemove(id) {
+  return queueArchive(async function () {
+    if (archive.kind === "claude") {
+      var before = archive.chunk.length;
+      archive.chunk = archive.chunk.filter(function (e) { return e.id !== id; });
+      if (archive.chunk.length !== before) {
+        archive.count = Math.max(0, archive.count - 1);
+        await writeRemoteChunk();
+      }
+    } else {
+      archive.local = archive.local.filter(function (e) { return e.id !== id; });
+      archive.count = archive.local.length;
+      saveLocalArchive();
+    }
+    if (typeof renderArchive === "function") renderArchive();
+  });
+}
+
 async function archiveAll() {
   await archiveChain;
   if (archive.kind === "claude") {

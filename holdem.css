@@ -651,3 +651,23 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
   .mini-act { font-size: 9px; padding: 0 4px; }
   .setup-hint { grid-column: 1 / -1; }
 }
+
+/* What the player holds, under the board */
+.you-have {
+  margin: 0; display: inline-flex; align-items: baseline; gap: 6px; flex-wrap: wrap; justify-content: center;
+  padding: 3px 10px; border-radius: 999px; background: rgba(10, 18, 13, 0.75); border: 1px solid rgba(227, 179, 65, 0.45);
+  font-size: 13px; color: var(--text); max-width: 100%;
+}
+.you-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px; color: var(--brass); font-weight: 700; }
+.you-hand { font-weight: 600; }
+@media (max-width: 640px) {
+  .you-have { font-size: 11px; padding: 2px 8px; }
+  .you-label { font-size: 9px; }
+}
+
+/* Misclick guard and undo */
+.btn.armed { outline: 2px solid var(--brass); outline-offset: 2px; box-shadow: 0 0 0 4px rgba(214, 170, 62, 0.25); }
+.guard-note { margin: 0 0 8px; font-size: 13px; color: var(--brass); }
+.link-btn { font: inherit; font-size: inherit; background: none; border: none; padding: 0; color: var(--brass); text-decoration: underline; cursor: pointer; }
+.controls-note.undone { color: var(--brass); }
+.btn.undo.armed { border-color: #d0645a; color: #f0a39b; outline-color: #d0645a; box-shadow: none; }

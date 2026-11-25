@@ -125,6 +125,16 @@ function actingOrder(street) {
   return (street === "preflop" ? PREFLOP_ORDER : POSTFLOP_ORDER).map(seatOfPos).filter(function (s) { return s >= 0; });
 }
 
+// "Your seat" practice setting: put the button wherever the hero lands in that position.
+// Seats this table size doesn't have (UTG at 6-handed) fall back to first to act.
+function fixedSeatButton(pos) {
+  var n = seatCount();
+  var order = positionsFor(n);
+  var idx = order.indexOf(pos);
+  if (idx < 0) idx = n > 3 ? 3 : 0;
+  return (HERO_SEAT - idx + n) % n;
+}
+
 function seatOfPos(pos) {
   var n = seatCount();
   var idx = positionsFor(n).indexOf(pos);
@@ -152,6 +162,8 @@ function canAct(p) {
 function botDelay() {
   var hero = players()[HERO_SEAT];
   if (hero.folded) return 90;
+  // A replay skips ahead to your first decision
+  if (table.replaying && table.hand && !table.hand.heroActed) return 30;
   return table.settings.speed === "fast" ? 220 : 650;
 }
 
@@ -161,7 +173,7 @@ function shuffledDeck() {
   var deck = [];
   for (var r = 0; r < 13; r++) for (var s = 0; s < 4; s++) deck.push({ rank: r, suit: s });
   for (var i = deck.length - 1; i > 0; i--) {
-    var j = Math.floor(Math.random() * (i + 1));
+    var j = Math.floor(rand() * (i + 1));
     var t = deck[i]; deck[i] = deck[j]; deck[j] = t;
   }
   return deck;
@@ -277,7 +289,8 @@ function readSettings() {
     cashDepth: parseInt($("set-depth").value, 10),
     levelLength: parseInt($("set-level").value, 10),
     tableSize: $("set-size").value,
-    speed: $("set-speed").value
+    speed: $("set-speed").value,
+    seat: $("set-seat").value
   };
 }
 
@@ -320,7 +333,7 @@ function startingTableSize() {
 function tableChurn() {
   var notes = [];
   var n = seatCount();
-  if (n > 4 && Math.random() < 0.12) {
+  if (n > 4 && rand() < 0.12) {
     var leave = randomInt(1, n - 1);
     var gone = table.players[leave];
     table.players.splice(leave, 1);
@@ -328,7 +341,7 @@ function tableChurn() {
     if (leave < table.button) table.button -= 1;
     table.button = table.button % table.players.length;
     notes.push(gone.name + " leaves the table.");
-  } else if (n < MAX_PLAYERS && Math.random() < 0.15) {
+  } else if (n < MAX_PLAYERS && rand() < 0.15) {
     var at = randomInt(1, n);
     var fresh = makePlayer(nextBotName(), botBuyIn(), false);
     table.players.splice(at, 0, fresh);
@@ -369,6 +382,9 @@ function makePlayer(name, stack, isHero) {
 
 function newSession() {
   if (table.running) return;
+  table.replaying = null;
+  table.replaySaved = null;
+  table.justUndid = false;
   table.settings = readSettings();
   table.level = 0;
   table.handsAtLevel = 0;
@@ -459,10 +475,20 @@ function record(action) {
 }
 
 async function playHand() {
-  if (table.running || table.over) return;
+  if (table.running) return;
+  if (!table.replaying && table.replaySaved) restoreAfterReplay();
+  if (table.over) { renderAll(); return; }
   table.running = true;
   pendingHero = null;
 
+  var replay = table.replaying;
+  table.undoneNote = "";
+  table.justUndid = false;
+  undoArmed = false;
+  var lock = table.settings.seat;
+  if (!replay && lock && lock !== "rotate") table.button = fixedSeatButton(lock);
+  var seed = replay ? replay.seed : Math.floor(Math.random() * 4294967296);
+  randSource = seededRandom(seed);
   var b = blinds();
   var deck = shuffledDeck();
   players().forEach(function (p, seat) {
@@ -502,7 +528,15 @@ async function playHand() {
     sessionId: table.sessionId,
     at: Date.now(),
     review: null,
-    done: false
+    done: false,
+    seed: seed,
+    button: table.button,
+    handsAtLevel: table.handsAtLevel,
+    settings: Object.assign({}, table.settings),
+    practice: !!replay,
+    replayOf: replay ? replay.no : null,
+    source: replay || null,
+    heroActed: false
   };
   table.viewing = table.hand;
   table.notice = "";
@@ -511,7 +545,7 @@ async function playHand() {
   post(seatOfPos("SB"), b.sb, "small blind");
   post(seatOfPos("BB"), b.bb, "big blind");
   // Live rooms: the first seat after the blinds sometimes posts a $5 straddle and acts last pre-flop
-  if (isLive() && seatCount() >= 4 && Math.random() < 0.3) {
+  if (isLive() && seatCount() >= 4 && rand() < 0.3) {
     var straddler = actingOrder("preflop")[0];
     if (players()[straddler].stack > b.bb * 10) {
       table.hand.straddle = Math.round(b.bb * 2.5);
@@ -536,9 +570,164 @@ async function playHand() {
   }
 
   settle();
+  randSource = Math.random;
   table.running = false;
-  recordHand(table.hand);
+  if (replay) table.replaying = null; // the real table comes back on the next deal
+  else recordHand(table.hand);
   renderAll();
+}
+
+// ===== MISCLICK GUARD =====
+// Off-chart pre-flop calls and raises, and anything over 25bb, take a second tap.
+var guardArmed = null;
+var guardOn = true;
+try { guardOn = localStorage.getItem("pokerapp.guard") !== "off"; } catch (e) { /* default on */ }
+
+function decisionKey(d) {
+  return d.type + ":" + (d.to || "");
+}
+
+function guardReason(d) {
+  if (!pendingHero || d.type === "fold" || d.type === "check") return null;
+  var ctx = pendingHero.ctx;
+  var me = players()[HERO_SEAT];
+  var cost = d.type === "call" ? Math.min(ctx.toCall, me.stack) : d.to - me.bet;
+  if (cost <= 0) return null;
+  if (ctx.street === "preflop" && cost >= ctx.bb) {
+    var chart = heroChartFor(ctx);
+    if (chart && chart.action === "Fold") return "The chart says fold here.";
+  }
+  if (cost >= 25 * ctx.bb) return "That puts in " + fmtBB(cost, ctx.bb) + ".";
+  return null;
+}
+
+// Button and keyboard path: the first tap on a guarded move arms it, the second plays it
+function heroChoose(decision) {
+  if (!pendingHero) return;
+  var why = guardOn ? guardReason(decision) : null;
+  if (why && guardArmed !== decisionKey(decision)) {
+    guardArmed = decisionKey(decision);
+    renderControls();
+    return;
+  }
+  heroDecide(decision);
+}
+
+// ===== UNDO LAST HAND =====
+// Takes back the most recent real hand: stacks, button and blinds go back to how they were
+// before it, and it leaves your stats, saved hands and archive. Only until the next deal.
+var undoArmed = false;
+
+function lastRealHand() {
+  return table.sessionHands[0] || null;
+}
+
+function canUndo() {
+  var h = lastRealHand();
+  return !!h && !table.justUndid && h.done && !h.practice && !table.running && !table.loading && h.button != null &&
+    !!h.seats && h.no === realTable().handNo && saved.recent[0] === h;
+}
+
+function undoLastHand() {
+  if (!canUndo()) return;
+  if (table.replaySaved) restoreAfterReplay();
+  var h = lastRealHand();
+  table.button = h.button;
+  table.players = h.seats.map(function (s) {
+    var p = makePlayer(s.name, s.stack, s.isHero);
+    p.style = s.style;
+    if (!s.isHero) table.usedNames.add(s.name);
+    return p;
+  });
+  table.players.forEach(function (p, seat) { p.pos = positionOf(seat); });
+  if (h.mode === "tournament") {
+    if (h.handsAtLevel != null) table.handsAtLevel = h.handsAtLevel;
+    else if (table.level !== h.level) table.handsAtLevel = Math.max(0, table.settings.levelLength - 1);
+    else table.handsAtLevel = Math.max(0, table.handsAtLevel - 1);
+    table.level = h.level;
+  }
+  table.handNo = h.no - 1;
+  table.over = false;
+  table.notice = h.notice || "";
+
+  table.sessionHands.shift();
+  saved.recent.shift();
+  var session = saved.sessions.find(function (x) { return x.id === h.sessionId; });
+  if (session) {
+    session.hands = Math.max(0, session.hands - 1);
+    session.net = round1(session.net - h.heroNet / h.bb);
+    if (h.vpip) session.vpip = Math.max(0, session.vpip - 1);
+    var verdict = chartVerdict(h);
+    if (verdict) {
+      session.charted = Math.max(0, session.charted - 1);
+      if (verdict !== "miss") session.onChart = Math.max(0, session.onChart - 1);
+    }
+  }
+  if (saved.curve.length) saved.curve.pop();
+  archiveRemove(h.sessionId + "-" + h.no);
+
+  table.hand = null;
+  table.viewing = table.sessionHands[0] || null;
+  table.justUndid = true;
+  table.undoneNote = "Hand " + h.no + " is undone: everyone's stacks are back to where they were before it, and it's out of your stats and saved hands.";
+  undoArmed = false;
+  saveTable();
+  renderAll();
+  renderPanel();
+  renderSession();
+  renderProgress();
+}
+
+// ===== PLAY IT AGAIN =====
+// Deals a finished hand again from the same seat, stacks and seed: same cards, same board,
+// and the bots repeat their choices until you do something different. Replays are practice:
+// they don't touch your stacks, stats, archive or reviews.
+function canReplay(h) {
+  return !!h && h.done && h.seed != null && !!h.settings && !table.running && !table.loading;
+}
+
+function replayHand(orig) {
+  if (!canReplay(orig)) return;
+  if (!table.replaySaved) table.replaySaved = {
+    players: table.players, button: table.button, level: table.level, handsAtLevel: table.handsAtLevel,
+    handNo: table.handNo, settings: table.settings, notice: table.notice, over: table.over, hand: table.hand
+  };
+  table.settings = Object.assign({}, orig.settings, { seat: "rotate", speed: table.settings.speed });
+  table.players = orig.seats.map(function (s) {
+    var p = makePlayer(s.name, s.stack, s.isHero);
+    p.style = s.style;
+    return p;
+  });
+  table.button = orig.button;
+  table.level = orig.level;
+  table.handNo = orig.no - 1;
+  table.notice = "";
+  table.over = false;
+  table.replaying = orig;
+  rangeOpen = false;
+  playHand();
+}
+
+// The real table, even while a replay is on the felt
+function realTable() {
+  return table.replaySaved || table;
+}
+
+function restoreAfterReplay() {
+  var s = table.replaySaved;
+  table.players = s.players;
+  table.button = s.button;
+  table.level = s.level;
+  table.handsAtLevel = s.handsAtLevel;
+  table.handNo = s.handNo;
+  table.notice = s.notice;
+  table.over = s.over;
+  var speed = table.settings.speed;
+  table.settings = s.settings;
+  table.settings.speed = speed;
+  table.replaying = null;
+  table.replaySaved = null;
+  table.hand = s.hand;
 }
 
 async function bettingRound(street) {
@@ -578,6 +767,7 @@ async function bettingRound(street) {
     var decision;
     if (p.isHero) {
       decision = await heroAct(ctx);
+      h.heroActed = true;
     } else {
       await sleep(botDelay());
       decision = street === "preflop" ? botPreflop(seat, ctx) : botPostflop(seat, ctx);
@@ -655,6 +845,7 @@ function settle() {
   // The cards that would have been dealt next, in order, and everyone's hole cards
   h.runout = h.deck.slice(h.deck.length - (5 - h.board.length)).reverse();
   h.holeCards = ps.map(function (p) { return p.cards.slice(); });
+  h.revealed = true;
   var live = [];
   ps.forEach(function (p, seat) { if (!p.folded) live.push(seat); });
 
@@ -711,6 +902,7 @@ function settle() {
   h.finalStacks = ps.map(function (p) { return p.stack; });
   h.done = true;
   table.acting = null;
+  if (h.practice) return;
   table.sessionHands.unshift(h);
 
   if (table.settings.mode === "tournament" && hero.stack === 0) {
@@ -764,8 +956,8 @@ function limperCount() {
 // Live open size: $10-15 (5-7.5bb), $20-30 over a straddle, plus $3-5 per limper
 function liveOpenTo() {
   var h = table.hand;
-  var base = h.straddle ? h.straddle * (4 + Math.random() * 2) : h.bb * (5 + Math.random() * 2.5);
-  return Math.round(base + limperCount() * h.bb * (1.5 + Math.random()));
+  var base = h.straddle ? h.straddle * (4 + rand() * 2) : h.bb * (5 + rand() * 2.5);
+  return Math.round(base + limperCount() * h.bb * (1.5 + rand()));
 }
 
 // Pairs, suited aces and suited connectors: hands that make big, hidden hands in multiway pots
@@ -1083,6 +1275,7 @@ function heroDecide(decision) {
   if (!pendingHero) return;
   var resolve = pendingHero.resolve;
   pendingHero = null;
+  guardArmed = null;
   renderControls();
   resolve(decision);
 }
@@ -1159,7 +1352,6 @@ function renderTable() {
   var winnerSeats = new Set();
   if (h && h.done) players().forEach(function (p, s) { if (p.won > 0) winnerSeats.add(s); });
   var revealed = h && h.revealed && canShowRest(h) ? restOfHand(h) : null;
-  var revealSeats = new Set(revealed ? revealed.hands.map(function (x) { return x.seat; }) : []);
 
   players().forEach(function (p, seat) {
     var pt = seatPoint(seat, 44, 41);
@@ -1172,7 +1364,7 @@ function renderTable() {
     node.style.top = pt.y + "%";
 
     var cards = el("div", "seat-cards");
-    if (h && h.revealed && h.holeCards && revealSeats.has(seat)) {
+    if (h && h.done && h.holeCards && h.holeCards[seat] && h.revealed !== false) {
       h.holeCards[seat].forEach(function (c) { cards.append(cardEl(c, p.isHero ? "md" : "sm")); });
     } else if (!p.folded || p.isHero) {
       p.cards.forEach(function (c) {
@@ -1210,6 +1402,7 @@ function renderTable() {
   felt.append(dealer);
 
   if (!h) {
+    $("you-have").hidden = true;
     $("pot").textContent = "";
     $("board").replaceChildren();
     for (var s = 0; s < 5; s++) $("board").append(el("div", "pcard slot lg"));
@@ -1219,6 +1412,16 @@ function renderTable() {
   }
 
   $("pot").textContent = "Pot " + fmtBB(h.done && h.potWon !== undefined ? h.potWon : potTotal(), h.bb);
+  var heroP = players()[HERO_SEAT];
+  var youHave = $("you-have");
+  youHave.replaceChildren();
+  if (heroP.folded && !h.done) {
+    youHave.hidden = true;
+  } else {
+    youHave.hidden = false;
+    youHave.append(el("span", "you-label", heroP.folded ? "You folded" : "You have"),
+      el("span", "you-hand", describeHolding(h.heroCards, h.board)));
+  }
   var board = $("board");
   board.replaceChildren();
   for (var i = 0; i < 5; i++) {
@@ -1379,16 +1582,36 @@ function renderControls() {
   }
 
   if (!table.running) {
-    var hero = players()[HERO_SEAT];
+    var hero = realTable().players[HERO_SEAT];
     var row = el("div", "controls-row");
     var next = el("button", "btn primary big", "Deal next hand");
     next.type = "button";
     next.id = "deal-next";
-    var cash = isCash();
-    var start = startingStack();
+    var real = realTable().settings;
+    var cash = real.mode !== "tournament";
+    var start = cash ? real.cashDepth * CASH_BLINDS.bb : TOURNEY_START;
     next.disabled = cash && hero.stack < CASH_BLINDS.bb;
     next.addEventListener("click", playHand);
     row.append(next);
+    var again = table.viewing;
+    if (canReplay(again)) {
+      var replayBtn = el("button", "btn ghost", "Play hand " + again.no + " again");
+      replayBtn.type = "button";
+      replayBtn.title = "Same seats, stacks and cards. The bots repeat their moves until you change yours. Practice only: not counted in your stats.";
+      replayBtn.addEventListener("click", function () { replayHand(again.practice ? again.source : again); });
+      row.append(replayBtn);
+    }
+    if (canUndo()) {
+      var last = lastRealHand();
+      var undoBtn = el("button", "btn ghost undo" + (undoArmed ? " armed" : ""), undoArmed ? "Tap again to undo hand " + last.no : "Undo hand " + last.no);
+      undoBtn.type = "button";
+      undoBtn.title = "Misclick? Put every stack back to before hand " + last.no + " and remove it from your stats and saved hands.";
+      undoBtn.addEventListener("click", function () {
+        if (!undoArmed) { undoArmed = true; renderControls(); return; }
+        undoLastHand();
+      });
+      row.append(undoBtn);
+    }
     if (cash && hero.stack < start) {
       var top = el("button", "btn", "Top up to " + fmtBB(start, CASH_BLINDS.bb));
       top.type = "button";
@@ -1400,7 +1623,8 @@ function renderControls() {
       });
       row.append(top);
     }
-    box.append(row, el("p", "controls-note", h ? "Space or Enter deals the next hand." :
+    if (table.undoneNote) box.append(row, el("p", "controls-note undone", table.undoneNote + " Space or Enter deals the next hand."));
+    else box.append(row, el("p", "controls-note", h ? "Space or Enter deals the next hand." :
       "Welcome back. Your table, stacks and session are where you left them. A hand that was still in progress when you left isn't saved."));
     return;
   }
@@ -1427,7 +1651,11 @@ function renderControls() {
     var b = el("button", "btn " + cls, label);
     b.type = "button";
     if (key) b.dataset.key = key;
-    b.addEventListener("click", function () { heroDecide(decision); });
+    if (guardArmed === decisionKey(decision)) {
+      b.classList.add("armed");
+      b.textContent = "Confirm: " + label;
+    }
+    b.addEventListener("click", function () { heroChoose(decision); });
     row.append(b);
     return b;
   }
@@ -1472,7 +1700,7 @@ function renderControls() {
         err.textContent = "Minimum is " + fmtBB(minTo, bb) + ".";
         return;
       }
-      heroDecide({ type: "raise", to: Math.min(chips, maxTo) });
+      heroChoose({ type: "raise", to: Math.min(chips, maxTo) });
     });
     box.append(form);
   }
@@ -1487,7 +1715,28 @@ function renderControls() {
     });
     box.append(rangeBtn);
   }
-  box.append(el("p", "controls-note", "Keys: F fold · C check or call" + (ctx.street === "preflop" ? " · R range view" : "")));
+  if (guardArmed) {
+    var armedWhy = guardArmedReason();
+    box.insertBefore(el("p", "guard-note", (armedWhy ? armedWhy + " " : "") + "Tap the highlighted button again to confirm, or pick something else."), row);
+  }
+  var note = el("p", "controls-note", "Keys: F fold · C check or call" + (ctx.street === "preflop" ? " · R range view" : "") + " · ");
+  var gt = el("button", "link-btn", "Misclick guard: " + (guardOn ? "on" : "off"));
+  gt.type = "button";
+  gt.title = "When on, off-chart pre-flop calls and raises, and anything over 25bb, need a second tap.";
+  gt.addEventListener("click", function () {
+    guardOn = !guardOn;
+    guardArmed = null;
+    try { localStorage.setItem("pokerapp.guard", guardOn ? "on" : "off"); } catch (e) { /* this visit only */ }
+    renderControls();
+  });
+  note.append(gt);
+  box.append(note);
+}
+
+function guardArmedReason() {
+  if (!guardArmed || !pendingHero) return null;
+  var parts = guardArmed.split(":");
+  return guardReason({ type: parts[0], to: parts[1] ? parseFloat(parts[1]) : undefined });
 }
 
 // ===== RENDERING: HAND PANEL =====
@@ -1516,7 +1765,7 @@ function renderPanel() {
     renderReview();
     return;
   }
-  $("hand-title").textContent = "Hand " + h.no + (h === table.hand && !h.done ? " · in progress" : "");
+  $("hand-title").textContent = (h.practice ? "Replay of hand " : "Hand ") + h.no + (h === table.hand && !h.done ? " · in progress" : "");
   $("hand-sub").textContent = "You: " + h.heroPos + " with " + cardsText(h.heroCards) + " · " + modeLabel(h.stage, h.mode) +
     " · " + fmtChips(h.sb) + "/" + fmtChips(h.bb) + (h.ante ? " ante " + fmtChips(h.ante) : "");
 
@@ -1546,6 +1795,15 @@ function renderPanel() {
         sd.append(el("li", null, (s.seat === HERO_SEAT ? "You" : s.name) + " (" + s.pos + "): " + cardsText(s.cards) + " · " + s.hand));
       });
       res.append(sd);
+      if (h.holeCards && h.revealed !== false) {
+        var shown = h.showdown.map(function (s) { return s.seat; });
+        var folded = h.seats.map(function (x, seat) { return seat; }).filter(function (seat) { return shown.indexOf(seat) === -1 && h.holeCards[seat]; });
+        if (folded.length) {
+          res.append(el("p", "rest-folded", "Folded: " + folded.map(function (seat) {
+            return seatLabel(h, seat) + " " + cardsText(h.holeCards[seat]);
+          }).join(" · ")));
+        }
+      }
     }
     h.results.forEach(function (r) { res.append(el("p", "result-line", r.replace(/^You wins/, "You win").replace(/^You split/, "You split").replace(/^You gets/, "You get"))); });
     var net = el("p", "net " + (h.heroNet > 0 ? "up" : h.heroNet < 0 ? "down" : "flat"), "Your result: " + signedBB(h.heroNet, h.bb));
@@ -1810,6 +2068,42 @@ function handWords(hand) {
 }
 
 // What Hero actually holds on a street, so reviews don't invent draws: "; Hero has Pair of Jacks, no draw"
+// Plain-English holding: "Top pair, King kicker · flush draw", "Overpair (Queens)", "KJ suited"
+function describeHolding(hole, board) {
+  if (!board.length) {
+    var n = handNotation(hole[0].rank >= hole[1].rank ? hole : [hole[1], hole[0]]);
+    return n.length === 2 ? "Pocket " + RANK_PLURAL[hole[0].rank] : handWords(n);
+  }
+  var best = evaluateHand(hole.concat(board));
+  var boardOnly = evaluateHand(board);
+  var cat = best.score[0];
+  var ranks = Array.from(new Set(board.map(function (c) { return c.rank; }))).sort(function (a, b) { return b - a; });
+  var high = Math.max(hole[0].rank, hole[1].rank);
+  var text = best.name;
+  if (cat > 0 && cat === boardOnly.score[0] && best.score[1] === boardOnly.score[1]) {
+    text = best.name + " on the board (" + RANK_WORDS[high] + " high)";
+  } else if (cat === 1) {
+    var pr = best.score[1];
+    if (hole[0].rank === hole[1].rank) {
+      text = (pr > ranks[0] ? "Overpair" : "Pocket pair under the board") + " (" + RANK_PLURAL[pr] + ")";
+    } else {
+      var kicker = hole[0].rank === pr ? hole[1].rank : hole[0].rank;
+      var place = pr === ranks[0] ? "Top pair" : (pr === ranks[1] ? "Middle pair" : "Bottom pair");
+      text = place + " (" + RANK_PLURAL[pr] + "), " + RANK_WORDS[kicker] + " kicker";
+    }
+  } else if (cat === 0) {
+    text = RANK_WORDS[high] + " high";
+  }
+  var draws = [];
+  if (board.length < 5 && cat < 4) {
+    var d = drawInfo(hole, board);
+    if (d.flush) draws.push("flush draw");
+    if (d.straightOuts >= 2) draws.push("open-ended straight draw");
+    else if (d.straightOuts === 1) draws.push("gutshot");
+  }
+  return text + (draws.length ? " · " + draws.join(" + ") : "");
+}
+
 function heroHolding(h, streetAction) {
   var foldedBefore = h.actions.slice(0, h.actions.indexOf(streetAction)).some(function (x) { return x.isHero && x.type === "fold"; });
   if (foldedBefore) return "";
@@ -1824,7 +2118,8 @@ function heroHolding(h, streetAction) {
     if (d.straightOuts >= 2) draws.push("open-ended straight draw");
     else if (d.straightOuts === 1) draws.push("gutshot straight draw");
   }
-  return "; Hero has " + made + ", " + (draws.length ? draws.join(" and ") : (streetAction.board.length < 5 ? "no draw" : "final hand"));
+  return "; Hero has " + made + ", " + (draws.length ? draws.join(" and ") : (streetAction.board.length < 5 ? "no draw" : "final hand")) +
+    " (" + describeHolding(h.heroCards, streetAction.board) + ")";
 }
 
 function historyLines(h) {
@@ -2079,6 +2374,10 @@ function renderReview() {
   if (h.review) renderFeedback(out, h.review);
   else if (!activeReview) out.replaceChildren();
 
+  if (h.practice) {
+    actions.append(el("p", "fb-note", "This was a replay of hand " + h.replayOf + ": practice only, so it isn't counted in your stats, saved to your hands, or sent for review. You knew the cards this time."));
+    return;
+  }
   if (sampleState === "ready") {
     var ask = el("button", "btn primary", h.review ? "Review again" : "Get Claude's feedback");
     ask.type = "button";
@@ -2121,16 +2420,18 @@ function round1(x) {
 }
 
 function tableSnapshot() {
+  var r = realTable();
   return {
-    settings: table.settings,
-    players: players().map(function (p) { return { name: p.name, stack: p.stack, style: p.style, isHero: p.isHero }; }),
-    button: table.button,
-    level: table.level,
-    handsAtLevel: table.handsAtLevel,
-    handNo: table.handNo,
+    settings: r.settings,
+    players: r.players.map(function (p) { return { name: p.name, stack: p.stack, style: p.style, isHero: p.isHero }; }),
+    button: r.button,
+    level: r.level,
+    handsAtLevel: r.handsAtLevel,
+    handNo: r.handNo,
     topUps: table.topUps,
-    over: table.over,
+    over: r.over,
     sessionId: table.sessionId,
+    justUndid: !!table.justUndid,
     usedNames: Array.from(table.usedNames)
   };
 }
@@ -2187,8 +2488,11 @@ function restoreTable() {
   table.topUps = t.topUps || 0;
   table.over = !!t.over;
   table.sessionId = t.sessionId;
+  table.justUndid = !!t.justUndid;
   table.usedNames = new Set(t.usedNames || []);
   if (!t.settings.tableSize) t.settings.tableSize = "9";
+  if (!t.settings.seat) t.settings.seat = "rotate";
+  $("set-seat").value = t.settings.seat;
   $("set-size").value = t.settings.tableSize;
   table.players = t.players.map(function (x) {
     var p = makePlayer(x.name, x.stack, x.isHero);
@@ -2463,7 +2767,7 @@ function renderAll() {
 
 function renderSetupHint() {
   var hint = $("setup-hint");
-  var s = table.settings;
+  var s = realTable().settings;
   var next = readSettings();
   var changed = !!s && table.players.length > 0 &&
     (next.mode !== s.mode || next.tableSize !== s.tableSize ||
@@ -2512,6 +2816,14 @@ $("new-session").addEventListener("click", function () {
 $("set-speed").addEventListener("change", function () {
   if (table.settings) {
     table.settings.speed = $("set-speed").value;
+    if (!table.running) saveTable();
+  }
+});
+// Seat practice applies from the next hand, no new session needed
+$("set-seat").addEventListener("change", function () {
+  if (table.settings) {
+    table.settings.seat = $("set-seat").value;
+    if (table.replaySaved) table.replaySaved.settings.seat = table.settings.seat;
     if (!table.running) saveTable();
   }
 });

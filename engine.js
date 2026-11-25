@@ -164,12 +164,28 @@ const STAGE_NOTES = {
 
 // ===== RANDOM HELPERS =====
 
+// Every random choice in a hand (the shuffle, bot decisions, sizings) goes through rand(),
+// so a hand can be dealt again from its seed and play out the same way.
+var randSource = Math.random;
+function rand() { return randSource(); }
+
+function seededRandom(seed) {
+  var a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    var t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function pick(list) {
-  return list[Math.floor(Math.random() * list.length)];
+  return list[Math.floor(rand() * list.length)];
 }
 
 function randomInt(min, max) {
-  return min + Math.floor(Math.random() * (max - min + 1));
+  return min + Math.floor(rand() * (max - min + 1));
 }
 
 // ===== DEALING =====
@@ -218,7 +234,7 @@ function buildScenario(filters) {
   var hero = pick(positionPool);
 
   var spot = filters.spot;
-  if (spot === "random") spot = Math.random() < 0.5 ? "unopened" : "facingRaise";
+  if (spot === "random") spot = rand() < 0.5 ? "unopened" : "facingRaise";
   // UTG can never face a raise, and BB can never be first in
   if (hero === "UTG") spot = "unopened";
   if (hero === "BB") spot = "facingRaise";
@@ -245,7 +261,7 @@ function buildScenario(filters) {
 // until the hand lands near one of the scenario's decision thresholds.
 function dealHand(scenario, tough) {
   var cards = dealHoleCards();
-  if (!tough || Math.random() > 0.75) return cards;
+  if (!tough || rand() > 0.75) return cards;
   for (var i = 0; i < 40; i++) {
     var hand = handNotation(cards);
     var p = handPercentile(hand, scenario.stack === "short");

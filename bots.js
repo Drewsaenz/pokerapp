@@ -37,7 +37,7 @@ const LIVE_STYLE_WEIGHTS = [["TAG", 2], ["LAG", 2], ["NIT", 1], ["CALL", 5]];
 function randomStyle(live) {
   var weights = live ? LIVE_STYLE_WEIGHTS : STYLE_WEIGHTS;
   var total = weights.reduce(function (s, w) { return s + w[1]; }, 0);
-  var roll = Math.random() * total;
+  var roll = rand() * total;
   for (var i = 0; i < weights.length; i++) {
     roll -= weights[i][1];
     if (roll < 0) return weights[i][0];
@@ -157,7 +157,7 @@ const AGGRESSION_KEEP = { strong: 1, medium: 0.85, draw: 0.6, weak: 0.45, air: 0
 // ===== EQUITY BY SIMULATION =====
 
 function takeRandom(cards) {
-  var i = Math.floor(Math.random() * cards.length);
+  var i = Math.floor(rand() * cards.length);
   var card = cards[i];
   cards[i] = cards[cards.length - 1];
   cards.pop();
@@ -167,15 +167,15 @@ function takeRandom(cards) {
 function sampleHoldingFor(p, avail, board) {
   var aggr = p.aggr || 0;
   for (var t = 0; t < 60; t++) {
-    var i = Math.floor(Math.random() * avail.length);
-    var j = Math.floor(Math.random() * (avail.length - 1));
+    var i = Math.floor(rand() * avail.length);
+    var j = Math.floor(rand() * (avail.length - 1));
     if (j >= i) j++;
     var a = avail[i], b = avail[j];
     var pair = a.rank >= b.rank ? [a, b] : [b, a];
     if (!inRange(p, handNotation(pair))) continue;
     if (aggr > 0 && board.length >= 3) {
       var keep = Math.pow(AGGRESSION_KEEP[holdingClass(pair, board)], aggr);
-      if (Math.random() > keep) continue;
+      if (rand() > keep) continue;
     }
     var hi = Math.max(i, j), lo = Math.min(i, j);
     avail[hi] = avail[avail.length - 1]; avail.pop();
@@ -275,24 +275,24 @@ function botPostflop(seat, ctx) {
   var sizeBoost = p.style === "LAG" ? 0.1 : 0;
 
   if (ctx.toCall === 0) {
-    if (equity >= monsterLine && !river && wet < 1.5 && Math.random() < st.slowplay) return { type: "check" };
+    if (equity >= monsterLine && !river && wet < 1.5 && rand() < st.slowplay) return { type: "check" };
     // Live passive players telegraph strength with size: big bets mean strong, small bets mean medium
     if (h.live && (p.style === "CALL" || p.style === "NIT")) {
-      if (equity >= valueLine + 0.12 && Math.random() < st.valueBet) return betDecision(p, ctx, 0.8 + Math.random() * 0.25);
-      if (equity >= valueLine - 0.15 && equity < valueLine + 0.12 && Math.random() < 0.4) return betDecision(p, ctx, 0.3);
+      if (equity >= valueLine + 0.12 && rand() < st.valueBet) return betDecision(p, ctx, 0.8 + rand() * 0.25);
+      if (equity >= valueLine - 0.15 && equity < valueLine + 0.12 && rand() < 0.4) return betDecision(p, ctx, 0.3);
     }
-    if (equity >= valueLine && Math.random() < st.valueBet) {
+    if (equity >= valueLine && rand() < st.valueBet) {
       return betDecision(p, ctx, (river || wet >= 1.5 ? 0.7 : 0.5) + sizeBoost);
     }
     if (ctx.street === "flop" && h.pfAggressor === seat && opponents <= 2 &&
-        Math.random() < st.cbet * (opponents === 1 ? 1 : 0.6)) {
+        rand() < st.cbet * (opponents === 1 ? 1 : 0.6)) {
       return betDecision(p, ctx, (wet >= 1.5 ? 0.5 : 0.33) + sizeBoost);
     }
-    if (!river && strongDraw && Math.random() < 0.45 * st.bluff) {
+    if (!river && strongDraw && rand() < 0.45 * st.bluff) {
       return betDecision(p, ctx, 0.6 + sizeBoost);
     }
     var bluffRate = 0.12 * st.bluff * (ip ? 1.3 : 0.8) * (river ? 1.2 : 1);
-    if (opponents === 1 && equity < 0.25 && Math.random() < bluffRate) {
+    if (opponents === 1 && equity < 0.25 && rand() < bluffRate) {
       return betDecision(p, ctx, (river ? 0.75 : 0.6) + sizeBoost);
     }
     return { type: "check" };
@@ -304,8 +304,8 @@ function botPostflop(seat, ctx) {
   var effective = equity * realize + implied + st.callAdj;
   var canRaise = p.stack + p.bet > ctx.currentBet && p.stack > ctx.toCall;
 
-  if (canRaise && equity >= monsterLine && Math.random() < st.raiseValue) return raiseDecision(p, ctx, 3);
-  if (canRaise && ctx.street === "flop" && strongDraw && opponents === 1 && Math.random() < 0.15 * st.bluff) {
+  if (canRaise && equity >= monsterLine && rand() < st.raiseValue) return raiseDecision(p, ctx, 3);
+  if (canRaise && ctx.street === "flop" && strongDraw && opponents === 1 && rand() < 0.15 * st.bluff) {
     return raiseDecision(p, ctx, 3);
   }
   if (effective >= required) return { type: "call" };
