@@ -458,10 +458,11 @@
     box.replaceChildren();
     var row = el("div", "controls-row");
     var advice = settings.coach ? adviceNow() : null;
-    function btn(label, cls, action, key) {
+    function btn(label, cls, action, key, letter) {
       var b = el("button", "btn " + cls, label);
       b.type = "button";
       b.dataset.key = key;
+      b.dataset.letter = letter;
       if (advice && advice.action === action) b.classList.add("suggested");
       var need = { bet4: 4, bet3: 3, bet2: 2, bet1: 1 }[action];
       if (need && game.ante * need > stackNow()) { b.disabled = true; b.title = "Not enough left in your stack"; }
@@ -488,18 +489,18 @@
         : "Ante " + money(settings.ante) + " + Blind " + money(settings.ante) + (settings.trips ? " + Trips " + money(settings.ante) : "") +
           " = " + money(startCost()) + " to start. Space deals.";
     } else if (game.stage === "preflop") {
-      btn("Check", "check", "check", "1");
-      btn("Bet 3× (" + money(game.ante * 3) + ")", "raise", "bet3", "2");
-      btn("Bet 4× (" + money(game.ante * 4) + ")", "raise strong", "bet4", "3");
-      note.textContent = "Before the flop: check, or bet 3× or 4× your Ante. Keys 1, 2, 3.";
+      btn("Check", "check", "check", "1", "c");
+      btn("Bet 3× (" + money(game.ante * 3) + ")", "raise", "bet3", "2", "t");
+      btn("Bet 4× (" + money(game.ante * 4) + ")", "raise strong", "bet4", "3", "b");
+      note.textContent = "Before the flop: check, or bet 3× or 4× your Ante. Keys: C check · B bet 4× · T bet 3×.";
     } else if (game.stage === "flop") {
-      btn("Check", "check", "check", "1");
-      btn("Bet 2× (" + money(game.ante * 2) + ")", "raise", "bet2", "2");
-      note.textContent = "On the flop: check, or bet 2× your Ante. Keys 1, 2.";
+      btn("Check", "check", "check", "1", "c");
+      btn("Bet 2× (" + money(game.ante * 2) + ")", "raise", "bet2", "2", "b");
+      note.textContent = "On the flop: check, or bet 2× your Ante. Keys: C check · B bet 2×.";
     } else if (game.stage === "river") {
-      btn("Fold", "fold", "fold", "1");
-      btn("Bet 1× (" + money(game.ante) + ")", "raise", "bet1", "2");
-      note.textContent = "Last chance: bet 1× or fold your Ante and Blind. Keys 1, 2.";
+      btn("Fold", "fold", "fold", "1", "f");
+      btn("Bet 1× (" + money(game.ante) + ")", "raise", "bet1", "2", "b");
+      note.textContent = "Last chance: bet 1× or fold your Ante and Blind. Keys: F fold · B bet 1×.";
     }
     box.append(row);
     if (advice) {
@@ -620,7 +621,8 @@
       if (e.target.tagName === "BUTTON" && e.target.id !== "deal-btn") return;
       e.preventDefault(); deal(); return;
     }
-    var b = document.querySelector('#controls [data-key="' + e.key + '"]');
+    var k = e.key.toLowerCase();
+    var b = document.querySelector('#controls [data-letter="' + k + '"]') || document.querySelector('#controls [data-key="' + k + '"]');
     if (b) { e.preventDefault(); b.click(); }
   });
 
