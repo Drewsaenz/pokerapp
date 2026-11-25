@@ -55,6 +55,7 @@ A cheat sheet for positions and pre-flop ranges, computed live from `engine.js`,
 A 9-handed table where you play full hands against eight bots, then get feedback on them.
 
 - **Games**: cash (100bb, 40bb or 15bb buy-in) or a tournament whose blinds rise every 6, 10 or 15 hands, moving through the early, middle (big-blind ante), bubble and final-table stages. Busted bots are replaced so the table stays full.
+- **Live $1/2 mode**: simulates a live Texas card room. Bots buy in for $100-$300, open to $10-15 ($20-30 over a straddle) plus $3-5 per limper, limp and limp-call a lot, call raises wide (so pots go multiway), and the table leans heavily toward calling stations and loose players. About 30% of hands have a $5 straddle that acts last pre-flop. Passive players 3-bet only premiums and size post-flop bets by strength. Your chart check and range view switch to live advice: bigger opens, isolation raises over limpers, over-limping speculative hands, folding dominated offsuit hands early, tighter calls against big multiway opens, and set-mining deep.
 - **Table size**: 9-handed, 6-handed, or "Varies", where (in cash games) players leave and sit down between hands, anywhere from 3 to 9. Short-handed tables drop the earliest positions, so 6-handed runs LJ, HJ, CO, BTN, SB, BB with those seats' ranges.
 - **Bots** each have a style shown on their seat: TAG (tight-aggressive), LAG (loose-aggressive), Nit (tight-passive) or Station (calling station). Pre-flop they play the simulator's chart ranges, widened or narrowed by style. Post-flop (`bots.js`) they:
   - estimate each opponent's range from that opponent's actions in the hand (an open, a 3-bet, a call, bets on earlier streets),
@@ -78,7 +79,7 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 
 ## Updating the hosted site
 
-GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=14`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
+GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=15`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
 
 ## Files
 

@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Play full Texas Hold'em hands at a 9-handed practice table against bots with different playing styles, and get Claude's feedback on each hand." />
     <title>Hold'em Practice Table</title>
-    <link rel="stylesheet" href="holdem.css?v=14" />
+    <link rel="stylesheet" href="holdem.css?v=15" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
     <header class="topbar">
-      <h1>Practice Table <span class="version" title="If this doesn't say v14, reload the page">v14 · compact options</span></h1>
+      <h1>Practice Table <span class="version" title="If this doesn't say v15, reload the page">v15 · live $1/2</span></h1>
       <nav class="nav">
         <a href="charts.html">Range Charts</a>
         <a href="simulator.html">Pre-Flop Simulator</a>
@@ -25,6 +25,7 @@
             <label for="set-mode">Game</label>
             <select id="set-mode">
               <option value="cash">Cash</option>
+              <option value="live">Live $1/2</option>
               <option value="tournament">Tournament</option>
             </select>
           </div>
@@ -39,7 +40,8 @@
           <div class="field" id="field-depth">
             <label for="set-depth">Buy-in</label>
             <select id="set-depth">
-              <option value="100">100bb</option>
+              <option value="150">150bb</option>
+              <option value="100" selected>100bb</option>
               <option value="40">40bb</option>
               <option value="15">15bb</option>
             </select>
@@ -124,9 +126,9 @@
       </aside>
     </main>
 
-    <script src="engine.js?v=14"></script>
-    <script src="bots.js?v=14"></script>
-    <script src="storage.js?v=14"></script>
-    <script src="holdem.js?v=14"></script>
+    <script src="engine.js?v=15"></script>
+    <script src="bots.js?v=15"></script>
+    <script src="storage.js?v=15"></script>
+    <script src="holdem.js?v=15"></script>
   </body>
 </html>

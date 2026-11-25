@@ -31,16 +31,23 @@ const BOT_STYLES = {
 };
 
 const STYLE_WEIGHTS = [["TAG", 4], ["LAG", 2], ["NIT", 2], ["CALL", 2]];
+// A live $1/2 room is mostly recreational players: calling stations and loose players
+const LIVE_STYLE_WEIGHTS = [["TAG", 2], ["LAG", 2], ["NIT", 1], ["CALL", 5]];
 
-function randomStyle() {
-  var total = STYLE_WEIGHTS.reduce(function (s, w) { return s + w[1]; }, 0);
+function randomStyle(live) {
+  var weights = live ? LIVE_STYLE_WEIGHTS : STYLE_WEIGHTS;
+  var total = weights.reduce(function (s, w) { return s + w[1]; }, 0);
   var roll = Math.random() * total;
-  for (var i = 0; i < STYLE_WEIGHTS.length; i++) {
-    roll -= STYLE_WEIGHTS[i][1];
-    if (roll < 0) return STYLE_WEIGHTS[i][0];
+  for (var i = 0; i < weights.length; i++) {
+    roll -= weights[i][1];
+    if (roll < 0) return weights[i][0];
   }
   return "TAG";
 }
+
+// Live play: how loosely each style limps first in, and calls a single raise (share of hands)
+const LIVE_LIMP = { TAG: 0, LAG: 0.3, NIT: 0.12, CALL: 0.45 };
+const LIVE_CALL = { TAG: 0.15, LAG: 0.3, NIT: 0.1, CALL: 0.45 };
 
 function styleOf(p) {
   return BOT_STYLES[p.style] || BOT_STYLES.TAG;
@@ -269,6 +276,11 @@ function botPostflop(seat, ctx) {
 
   if (ctx.toCall === 0) {
     if (equity >= monsterLine && !river && wet < 1.5 && Math.random() < st.slowplay) return { type: "check" };
+    // Live passive players telegraph strength with size: big bets mean strong, small bets mean medium
+    if (h.live && (p.style === "CALL" || p.style === "NIT")) {
+      if (equity >= valueLine + 0.12 && Math.random() < st.valueBet) return betDecision(p, ctx, 0.8 + Math.random() * 0.25);
+      if (equity >= valueLine - 0.15 && equity < valueLine + 0.12 && Math.random() < 0.4) return betDecision(p, ctx, 0.3);
+    }
     if (equity >= valueLine && Math.random() < st.valueBet) {
       return betDecision(p, ctx, (river || wet >= 1.5 ? 0.7 : 0.5) + sizeBoost);
     }
