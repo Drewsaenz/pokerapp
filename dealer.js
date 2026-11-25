@@ -215,7 +215,7 @@
   var SAVE_KEY = "pokerapp.dealer.v1";
   var DEFAULT_BUY_IN = 300;
   function freshStats(bank) {
-    return { bank: bank, hands: 0, net: 0, decisions: 0, correct: 0, rebuys: 0, byStreet: { preflop: [0, 0], flop: [0, 0], river: [0, 0] }, log: [], biggest: 0 };
+    return { v: 2, bank: bank, hands: 0, net: 0, decisions: 0, correct: 0, rebuys: 0, byStreet: { preflop: [0, 0], flop: [0, 0], river: [0, 0] }, log: [], biggest: 0 };
   }
   var stats = freshStats(DEFAULT_BUY_IN);
   var settings = { ante: 10, trips: false, coach: true, buyIn: DEFAULT_BUY_IN };
@@ -226,11 +226,17 @@
       var raw = localStorage.getItem(SAVE_KEY);
       if (raw) {
         var s = JSON.parse(raw);
-        var hadBuyIn = !!(s.settings && s.settings.buyIn);
+        var oldSave = !(s.stats && s.stats.v >= 2);
         if (s.stats) stats = Object.assign(stats, s.stats);
         if (s.settings) settings = Object.assign(settings, s.settings);
-        // Saves from before the buy-in setting started at $1,000; an untouched one starts over at the new default
-        if (!hadBuyIn && !stats.hands) stats.bank = settings.buyIn;
+        // Saves from before the buy-in setting started everyone at $1,000. Re-base them on the buy-in:
+        // your stack is the buy-in plus what you've won or lost, and your hands and accuracy stay.
+        if (oldSave) {
+          stats.bank = Math.max(0, settings.buyIn + (stats.net || 0));
+          stats.rebuys = 0;
+          stats.v = 2;
+          save();
+        }
       }
     } catch (e) { /* starts fresh */ }
   }
