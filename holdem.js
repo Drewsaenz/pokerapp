@@ -926,6 +926,7 @@ function liveAdjust(base, sc, rec, ctx) {
     var openLine = rec.lines[0];
     if (limpers) {
       out.spot = "Limpers in front of you";
+      out.limpers = 0;
       // Isolate strong hands big, over-limp hands that make big hands multiway, fold the rest
       if (p <= openLine * 0.8) {
         out.action = "Raise";
@@ -1803,6 +1804,29 @@ function historyText(h) {
   }
 }
 
+function handWords(hand) {
+  if (hand.length === 2) return "pocket " + hand;
+  return hand.slice(0, 2) + (hand[2] === "s" ? " suited" : " offsuit");
+}
+
+// What Hero actually holds on a street, so reviews don't invent draws: "; Hero has Pair of Jacks, no draw"
+function heroHolding(h, streetAction) {
+  var foldedBefore = h.actions.slice(0, h.actions.indexOf(streetAction)).some(function (x) { return x.isHero && x.type === "fold"; });
+  if (foldedBefore) return "";
+  var best = evaluateHand(h.heroCards.concat(streetAction.board));
+  var boardOnly = evaluateHand(streetAction.board);
+  var onBoard = best.score[0] > 0 && best.score[0] === boardOnly.score[0] && best.score[1] === boardOnly.score[1];
+  var made = best.name + (onBoard ? " (from the board, not Hero's cards)" : "");
+  var draws = [];
+  if (streetAction.board.length < 5) {
+    var d = drawInfo(h.heroCards, streetAction.board);
+    if (d.flush) draws.push("flush draw");
+    if (d.straightOuts >= 2) draws.push("open-ended straight draw");
+    else if (d.straightOuts === 1) draws.push("gutshot straight draw");
+  }
+  return "; Hero has " + made + ", " + (draws.length ? draws.join(" and ") : (streetAction.board.length < 5 ? "no draw" : "final hand"));
+}
+
 function historyLines(h) {
   var bb = h.bb;
   var lines = [];
@@ -1814,8 +1838,9 @@ function historyLines(h) {
     : "Tournament, " + GAME_STAGES[h.stage].label.replace("Tournament · ", "").toLowerCase() + " stage, level " + (h.level + 1) +
       ": blinds " + h.sb + "/" + h.bb + (h.ante ? ", big-blind ante " + h.ante : "");
   lines.push("Hand #" + h.no + " — " + game + ", " + h.seats.length + "-handed. Amounts in big blinds.");
-  lines.push("Hero: " + h.heroPos + " with " + cardsText(h.heroCards, true) + " (" + h.heroHand + "), stack " +
+  lines.push("Hero: " + h.heroPos + " with " + cardsText(h.heroCards) + " (" + handWords(h.heroHand) + "), stack " +
     fmtBB(h.seats[HERO_SEAT].stack, bb) + ".");
+  lines.push("Card notation: ♠ spades, ♥ hearts, ♦ diamonds, ♣ clubs. Hero's hole cards are exactly the two above.");
   var stacks = PREFLOP_ORDER.filter(function (pos) {
     return h.seats.some(function (x) { return x.pos === pos; });
   }).map(function (pos) {
@@ -1841,7 +1866,7 @@ function historyLines(h) {
   h.actions.forEach(function (a) {
     if (a.type === "street") {
       flush();
-      current = STREET_LABELS[a.street] + " [" + cardsText(a.board, true) + "] (pot " + fmtBB(a.pot, bb) + ")";
+      current = STREET_LABELS[a.street] + " [" + cardsText(a.board) + "] (pot " + fmtBB(a.pot, bb) + heroHolding(h, a) + ")";
       street = a.street;
       pot = a.pot;
       streetBet = 0;
@@ -1862,9 +1887,9 @@ function historyLines(h) {
   });
   flush();
   if (h.showdown.length) {
-    lines.push("Board: " + cardsText(h.board, true) + ".");
+    lines.push("Board: " + cardsText(h.board) + ".");
     lines.push("Showdown: " + h.showdown.map(function (s) {
-      return (s.seat === HERO_SEAT ? "Hero" : s.pos) + " " + cardsText(s.cards, true) + " (" + s.hand + ")";
+      return (s.seat === HERO_SEAT ? "Hero" : s.pos) + " " + cardsText(s.cards) + " (" + s.hand + ")";
     }).join("; ") + ".");
   }
   lines.push("Result: " + h.results.map(function (r) {
@@ -1899,6 +1924,7 @@ function handPrompt(h) {
     "You are a poker coach reviewing one hand from a no-limit Texas Hold'em practice app. The player is \"Hero\".",
     BOT_RULES,
     "Judge Hero's decisions as you would against real opponents, and note where the opponent's labelled style should change Hero's play (for example, value-bet thinner against a calling station, fold more to a tight-passive player's raise).",
+    "Use only the cards shown. Each street's \"Hero has\" note states Hero's made hand and draws; do not credit Hero with draws or hands it doesn't list.",
     h.mode === "live" ? LIVE_RULES : "",
     "",
     historyText(h),
@@ -1919,6 +1945,7 @@ function sessionPrompt(hands) {
     "You are a poker coach reviewing a block of hands from a no-limit Texas Hold'em practice app. The player is \"Hero\".",
     BOT_RULES,
     hands.some(function (x) { return x.mode === "live"; }) ? LIVE_RULES : "",
+    "Use only the cards shown. Each street's \"Hero has\" note states Hero's made hand and draws; do not credit Hero with draws or hands it doesn't list.",
     "",
     hands.map(historyText).join("\n\n"),
     "",
