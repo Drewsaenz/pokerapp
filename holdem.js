@@ -64,9 +64,23 @@ function el(tag, className, text) {
   return node;
 }
 
-function fmtBB(chips, bb) {
+// Amounts show in big blinds or in dollars (chips in tournaments), per the player's choice.
+// Hand histories for Claude always use big blinds.
+let displayUnit = "bb";
+let historyMode = false;
+try { if (localStorage.getItem("pokerapp.unit") === "money") displayUnit = "money"; } catch (e) { /* default to bb */ }
+
+function bbText(chips, bb) {
   var v = Math.round((chips / bb) * 10) / 10;
   return (Number.isInteger(v) ? String(v) : v.toFixed(1)) + "bb";
+}
+
+function showMoney() {
+  return displayUnit === "money" && !historyMode;
+}
+
+function fmtBB(chips, bb) {
+  return showMoney() ? fmtChips(Math.round(chips)) : bbText(chips, bb);
 }
 
 function fmtChips(chips) {
@@ -279,10 +293,10 @@ function modeLabel(stage, mode) {
   return mode === "live" ? "Live $1/2" : GAME_STAGES[stage].label;
 }
 
-// Live card-room bots buy in anywhere from the $100 minimum to the $300 maximum, mostly near the top
+// Live card-room bots buy in for $200-$300
 function botBuyIn() {
   if (!isLive()) return startingStack();
-  return (Math.random() < 0.6 ? randomInt(125, 150) : randomInt(50, 125)) * CASH_BLINDS.bb;
+  return randomInt(100, 150) * CASH_BLINDS.bb;
 }
 
 function syncSettingsVisibility() {
@@ -376,6 +390,7 @@ function newSession() {
   saveTable();
   renderProgress();
   renderSetupHint();
+  renderUnitToggle();
   playHand();
 }
 
@@ -617,8 +632,8 @@ function applyDecision(seat, d, ctx) {
   if (p.isHero && ctx.street === "preflop") h.vpip = true;
 
   var kind = type === "call" ? "call" : (ctx.currentBet === 0 ? "bet" : "raise");
-  p.lastAction = (kind === "call" ? "Call " : kind === "bet" ? "Bet " : "Raise ") + fmtBB(kind === "call" ? add : to, h.bb) +
-    (p.allIn ? " · all-in" : "");
+  // Stored as parts so the seat label can follow the bb / $ switch
+  p.lastAction = { verb: kind === "call" ? "Call" : kind === "bet" ? "Bet" : "Raise", chips: kind === "call" ? add : to, allIn: p.allIn };
   record({ street: ctx.street, seat: seat, type: kind, to: to, add: add, allIn: p.allIn });
   if (ctx.street === "preflop") {
     updateRange(p, kind, ctx);
@@ -1170,7 +1185,10 @@ function renderTable() {
     var stack = el("div", "seat-stack", p.allIn && !done ? "All-in" : fmtBB(p.stack, bb));
     stack.title = fmtChips(p.stack);
     plate.append(top, stack);
-    var act = el("div", "seat-act", winnerSeats.has(seat) ? "Wins " + fmtBB(p.won, bb) : p.lastAction);
+    var last = p.lastAction && typeof p.lastAction === "object"
+      ? p.lastAction.verb + " " + fmtBB(p.lastAction.chips, bb) + (p.lastAction.allIn ? " · all-in" : "")
+      : p.lastAction;
+    var act = el("div", "seat-act", winnerSeats.has(seat) ? "Wins " + fmtBB(p.won, bb) : last);
     node.append(cards, plate, act);
     felt.append(node);
 
@@ -1431,14 +1449,16 @@ function renderControls() {
   if (canRaise) {
     var form = el("form", "custom-raise");
     var minTo = Math.min(maxTo, ctx.currentBet + ctx.minRaise);
-    var label = el("label", null, verb + " (bb)");
+    var money = showMoney();
+    var unitSize = money ? 1 : bb;
+    var label = el("label", null, verb + (money ? (isCash() ? " ($)" : " (chips)") : " (bb)"));
     label.htmlFor = "custom-amount";
     var input = el("input");
     input.id = "custom-amount";
     input.type = "number";
-    input.step = "0.5";
-    input.min = String(Math.round((minTo / bb) * 10) / 10);
-    input.max = String(Math.round((maxTo / bb) * 10) / 10);
+    input.step = money ? "1" : "0.5";
+    input.min = String(Math.round((minTo / unitSize) * 10) / 10);
+    input.max = String(Math.round((maxTo / unitSize) * 10) / 10);
     input.placeholder = input.min + "–" + input.max;
     var go = el("button", "btn ghost", verb);
     go.type = "submit";
@@ -1446,7 +1466,7 @@ function renderControls() {
     form.append(label, input, go, err);
     form.addEventListener("submit", function (e) {
       e.preventDefault();
-      var chips = Math.round(parseFloat(input.value) * bb);
+      var chips = Math.round(parseFloat(input.value) * unitSize);
       if (!isFinite(chips) || chips < minTo) {
         err.textContent = "Minimum is " + fmtBB(minTo, bb) + ".";
         return;
@@ -1775,6 +1795,15 @@ function renderArchive() {
 // ===== HAND HISTORY TEXT (for Claude) =====
 
 function historyText(h) {
+  historyMode = true;
+  try {
+    return historyLines(h);
+  } finally {
+    historyMode = false;
+  }
+}
+
+function historyLines(h) {
   var bb = h.bb;
   var lines = [];
   var game = h.mode === "live"
@@ -2144,6 +2173,7 @@ function restoreTable() {
   table.sessionHands = saved.recent.filter(function (h) { return h.sessionId === t.sessionId; });
   table.viewing = table.sessionHands[0] || null;
   renderSetupHint();
+  renderUnitToggle();
 }
 
 function renderSaveStatus() {
@@ -2422,6 +2452,27 @@ function renderSetupHint() {
 
 $("set-mode").addEventListener("change", function () { syncSettingsVisibility(); renderSetupHint(); });
 ["set-size", "set-depth", "set-level"].forEach(function (id) { $(id).addEventListener("change", renderSetupHint); });
+function renderUnitToggle() {
+  var tournament = !!table.settings && !isCash();
+  document.querySelectorAll("#unit-toggle button").forEach(function (b) {
+    var on = b.dataset.unit === displayUnit;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    if (b.dataset.unit === "money") b.textContent = tournament ? "Chips" : "$";
+  });
+}
+
+document.querySelectorAll("#unit-toggle button").forEach(function (b) {
+  b.addEventListener("click", function () {
+    displayUnit = b.dataset.unit;
+    try { localStorage.setItem("pokerapp.unit", displayUnit); } catch (e) { /* remembered for this visit only */ }
+    renderUnitToggle();
+    renderAll();
+    renderPanel();
+    renderSession();
+  });
+});
+
 $("mini-range").addEventListener("click", function () {
   rangeOpen = true;
   renderControls();
@@ -2475,6 +2526,7 @@ Promise.all([loadProgress(), loadArchive()]).then(function () {
   table.loading = false;
   if (saved.table && saved.table.players && saved.table.players.length) restoreTable();
   renderSaveStatus();
+  renderUnitToggle();
   renderAll();
   renderPanel();
   renderProgress();

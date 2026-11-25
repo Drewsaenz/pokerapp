@@ -85,7 +85,13 @@ body {
 }
 
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.field label { font-size: 12px; color: var(--muted); }
+.field label, .field-label { font-size: 12px; color: var(--muted); }
+.unit-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel-2); }
+.unit-toggle button {
+  font: inherit; font-size: 14px; padding: 7px 12px; border: none; background: transparent; color: var(--muted); cursor: pointer; min-width: 40px;
+}
+.unit-toggle button.on { background: var(--brass); color: #1c1606; font-weight: 700; }
+.unit-toggle button:focus-visible { outline: 2px solid var(--brass); outline-offset: -2px; }
 
 select, input {
   font: inherit;
@@ -470,7 +476,10 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
   }
   .setup .field label { font-size: 11px; }
   .setup select { width: 100%; padding: 6px 8px; font-size: 14px; }
-  .setup #new-session { grid-column: span 2; padding: 7px 10px; }
+  .setup #new-session { padding: 7px 10px; }
+  .setup .field-label { font-size: 11px; }
+  .unit-toggle { display: flex; }
+  .unit-toggle button { flex: 1; padding: 6px 4px; min-width: 0; }
   .table-wrap { padding: 8px; }
   .felt { aspect-ratio: 3 / 4; border-radius: 46% / 50%; }
   .center { width: 70%; }
