@@ -664,3 +664,10 @@ select:focus-visible, input:focus-visible, .btn:focus-visible, .hand-row:focus-v
   .you-have { font-size: 11px; padding: 2px 8px; }
   .you-label { font-size: 9px; }
 }
+
+/* Misclick guard and undo */
+.btn.armed { outline: 2px solid var(--brass); outline-offset: 2px; box-shadow: 0 0 0 4px rgba(214, 170, 62, 0.25); }
+.guard-note { margin: 0 0 8px; font-size: 13px; color: var(--brass); }
+.link-btn { font: inherit; font-size: inherit; background: none; border: none; padding: 0; color: var(--brass); text-decoration: underline; cursor: pointer; }
+.controls-note.undone { color: var(--brass); }
+.btn.undo.armed { border-color: #d0645a; color: #f0a39b; outline-color: #d0645a; box-shadow: none; }

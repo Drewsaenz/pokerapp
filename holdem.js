@@ -384,6 +384,7 @@ function newSession() {
   if (table.running) return;
   table.replaying = null;
   table.replaySaved = null;
+  table.justUndid = false;
   table.settings = readSettings();
   table.level = 0;
   table.handsAtLevel = 0;
@@ -481,6 +482,9 @@ async function playHand() {
   pendingHero = null;
 
   var replay = table.replaying;
+  table.undoneNote = "";
+  table.justUndid = false;
+  undoArmed = false;
   var lock = table.settings.seat;
   if (!replay && lock && lock !== "rotate") table.button = fixedSeatButton(lock);
   var seed = replay ? replay.seed : Math.floor(Math.random() * 4294967296);
@@ -527,6 +531,7 @@ async function playHand() {
     done: false,
     seed: seed,
     button: table.button,
+    handsAtLevel: table.handsAtLevel,
     settings: Object.assign({}, table.settings),
     practice: !!replay,
     replayOf: replay ? replay.no : null,
@@ -570,6 +575,107 @@ async function playHand() {
   if (replay) table.replaying = null; // the real table comes back on the next deal
   else recordHand(table.hand);
   renderAll();
+}
+
+// ===== MISCLICK GUARD =====
+// Off-chart pre-flop calls and raises, and anything over 25bb, take a second tap.
+var guardArmed = null;
+var guardOn = true;
+try { guardOn = localStorage.getItem("pokerapp.guard") !== "off"; } catch (e) { /* default on */ }
+
+function decisionKey(d) {
+  return d.type + ":" + (d.to || "");
+}
+
+function guardReason(d) {
+  if (!pendingHero || d.type === "fold" || d.type === "check") return null;
+  var ctx = pendingHero.ctx;
+  var me = players()[HERO_SEAT];
+  var cost = d.type === "call" ? Math.min(ctx.toCall, me.stack) : d.to - me.bet;
+  if (cost <= 0) return null;
+  if (ctx.street === "preflop" && cost >= ctx.bb) {
+    var chart = heroChartFor(ctx);
+    if (chart && chart.action === "Fold") return "The chart says fold here.";
+  }
+  if (cost >= 25 * ctx.bb) return "That puts in " + fmtBB(cost, ctx.bb) + ".";
+  return null;
+}
+
+// Button and keyboard path: the first tap on a guarded move arms it, the second plays it
+function heroChoose(decision) {
+  if (!pendingHero) return;
+  var why = guardOn ? guardReason(decision) : null;
+  if (why && guardArmed !== decisionKey(decision)) {
+    guardArmed = decisionKey(decision);
+    renderControls();
+    return;
+  }
+  heroDecide(decision);
+}
+
+// ===== UNDO LAST HAND =====
+// Takes back the most recent real hand: stacks, button and blinds go back to how they were
+// before it, and it leaves your stats, saved hands and archive. Only until the next deal.
+var undoArmed = false;
+
+function lastRealHand() {
+  return table.sessionHands[0] || null;
+}
+
+function canUndo() {
+  var h = lastRealHand();
+  return !!h && !table.justUndid && h.done && !h.practice && !table.running && !table.loading && h.button != null &&
+    !!h.seats && h.no === realTable().handNo && saved.recent[0] === h;
+}
+
+function undoLastHand() {
+  if (!canUndo()) return;
+  if (table.replaySaved) restoreAfterReplay();
+  var h = lastRealHand();
+  table.button = h.button;
+  table.players = h.seats.map(function (s) {
+    var p = makePlayer(s.name, s.stack, s.isHero);
+    p.style = s.style;
+    if (!s.isHero) table.usedNames.add(s.name);
+    return p;
+  });
+  table.players.forEach(function (p, seat) { p.pos = positionOf(seat); });
+  if (h.mode === "tournament") {
+    if (h.handsAtLevel != null) table.handsAtLevel = h.handsAtLevel;
+    else if (table.level !== h.level) table.handsAtLevel = Math.max(0, table.settings.levelLength - 1);
+    else table.handsAtLevel = Math.max(0, table.handsAtLevel - 1);
+    table.level = h.level;
+  }
+  table.handNo = h.no - 1;
+  table.over = false;
+  table.notice = h.notice || "";
+
+  table.sessionHands.shift();
+  saved.recent.shift();
+  var session = saved.sessions.find(function (x) { return x.id === h.sessionId; });
+  if (session) {
+    session.hands = Math.max(0, session.hands - 1);
+    session.net = round1(session.net - h.heroNet / h.bb);
+    if (h.vpip) session.vpip = Math.max(0, session.vpip - 1);
+    var verdict = chartVerdict(h);
+    if (verdict) {
+      session.charted = Math.max(0, session.charted - 1);
+      if (verdict !== "miss") session.onChart = Math.max(0, session.onChart - 1);
+    }
+  }
+  if (saved.curve.length) saved.curve.pop();
+  archiveRemove(h.sessionId + "-" + h.no);
+
+  table.hand = null;
+  table.viewing = table.sessionHands[0] || null;
+  table.justUndid = true;
+  table.undoneNote = "Hand " + h.no + " is undone: everyone's stacks are back to where they were before it, and it's out of your stats and saved hands.";
+  undoArmed = false;
+  saveTable();
+  renderAll();
+  renderPanel();
+  renderSession();
+  renderProgress();
 }
 
 // ===== PLAY IT AGAIN =====
@@ -1169,6 +1275,7 @@ function heroDecide(decision) {
   if (!pendingHero) return;
   var resolve = pendingHero.resolve;
   pendingHero = null;
+  guardArmed = null;
   renderControls();
   resolve(decision);
 }
@@ -1494,6 +1601,17 @@ function renderControls() {
       replayBtn.addEventListener("click", function () { replayHand(again.practice ? again.source : again); });
       row.append(replayBtn);
     }
+    if (canUndo()) {
+      var last = lastRealHand();
+      var undoBtn = el("button", "btn ghost undo" + (undoArmed ? " armed" : ""), undoArmed ? "Tap again to undo hand " + last.no : "Undo hand " + last.no);
+      undoBtn.type = "button";
+      undoBtn.title = "Misclick? Put every stack back to before hand " + last.no + " and remove it from your stats and saved hands.";
+      undoBtn.addEventListener("click", function () {
+        if (!undoArmed) { undoArmed = true; renderControls(); return; }
+        undoLastHand();
+      });
+      row.append(undoBtn);
+    }
     if (cash && hero.stack < start) {
       var top = el("button", "btn", "Top up to " + fmtBB(start, CASH_BLINDS.bb));
       top.type = "button";
@@ -1505,7 +1623,8 @@ function renderControls() {
       });
       row.append(top);
     }
-    box.append(row, el("p", "controls-note", h ? "Space or Enter deals the next hand." :
+    if (table.undoneNote) box.append(row, el("p", "controls-note undone", table.undoneNote + " Space or Enter deals the next hand."));
+    else box.append(row, el("p", "controls-note", h ? "Space or Enter deals the next hand." :
       "Welcome back. Your table, stacks and session are where you left them. A hand that was still in progress when you left isn't saved."));
     return;
   }
@@ -1532,7 +1651,11 @@ function renderControls() {
     var b = el("button", "btn " + cls, label);
     b.type = "button";
     if (key) b.dataset.key = key;
-    b.addEventListener("click", function () { heroDecide(decision); });
+    if (guardArmed === decisionKey(decision)) {
+      b.classList.add("armed");
+      b.textContent = "Confirm: " + label;
+    }
+    b.addEventListener("click", function () { heroChoose(decision); });
     row.append(b);
     return b;
   }
@@ -1577,7 +1700,7 @@ function renderControls() {
         err.textContent = "Minimum is " + fmtBB(minTo, bb) + ".";
         return;
       }
-      heroDecide({ type: "raise", to: Math.min(chips, maxTo) });
+      heroChoose({ type: "raise", to: Math.min(chips, maxTo) });
     });
     box.append(form);
   }
@@ -1592,7 +1715,28 @@ function renderControls() {
     });
     box.append(rangeBtn);
   }
-  box.append(el("p", "controls-note", "Keys: F fold · C check or call" + (ctx.street === "preflop" ? " · R range view" : "")));
+  if (guardArmed) {
+    var armedWhy = guardArmedReason();
+    box.insertBefore(el("p", "guard-note", (armedWhy ? armedWhy + " " : "") + "Tap the highlighted button again to confirm, or pick something else."), row);
+  }
+  var note = el("p", "controls-note", "Keys: F fold · C check or call" + (ctx.street === "preflop" ? " · R range view" : "") + " · ");
+  var gt = el("button", "link-btn", "Misclick guard: " + (guardOn ? "on" : "off"));
+  gt.type = "button";
+  gt.title = "When on, off-chart pre-flop calls and raises, and anything over 25bb, need a second tap.";
+  gt.addEventListener("click", function () {
+    guardOn = !guardOn;
+    guardArmed = null;
+    try { localStorage.setItem("pokerapp.guard", guardOn ? "on" : "off"); } catch (e) { /* this visit only */ }
+    renderControls();
+  });
+  note.append(gt);
+  box.append(note);
+}
+
+function guardArmedReason() {
+  if (!guardArmed || !pendingHero) return null;
+  var parts = guardArmed.split(":");
+  return guardReason({ type: parts[0], to: parts[1] ? parseFloat(parts[1]) : undefined });
 }
 
 // ===== RENDERING: HAND PANEL =====
@@ -2287,6 +2431,7 @@ function tableSnapshot() {
     topUps: table.topUps,
     over: r.over,
     sessionId: table.sessionId,
+    justUndid: !!table.justUndid,
     usedNames: Array.from(table.usedNames)
   };
 }
@@ -2343,6 +2488,7 @@ function restoreTable() {
   table.topUps = t.topUps || 0;
   table.over = !!t.over;
   table.sessionId = t.sessionId;
+  table.justUndid = !!t.justUndid;
   table.usedNames = new Set(t.usedNames || []);
   if (!t.settings.tableSize) t.settings.tableSize = "9";
   if (!t.settings.seat) t.settings.seat = "rotate";

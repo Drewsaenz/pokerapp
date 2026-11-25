@@ -69,6 +69,8 @@ A 9-handed table where you play full hands against eight bots, then get feedback
 - **You have**: a line under the board always says what you're holding in plain English, e.g. "Top pair (Jacks), King kicker · flush draw", "Overpair (Queens)" or "KJ suited" before the flop.
 - **Everyone's cards at the end**: when a hand ends, every player's hole cards turn face up on the table, folded players included (dimmed), and the run-out is shown when the hand ended early. Hide it per hand if you like.
 - **Play it again**: after any hand, "Play hand N again" deals it again with the same seats, stacks and cards. Every random choice in a hand (the shuffle, bot decisions, bet sizes) comes from a per-hand seed, so the bots repeat their moves until you do something different, and then react to what you actually did. Replays are practice: they skip ahead to your first decision, aren't counted in your stats or saved to your hands, and aren't sent for review. The real table comes back when you deal the next hand.
+- **Undo last hand**: until you deal again, "Undo hand N" (tap twice) puts every stack, the button and the blind level back to before your most recent hand and removes it from your stats, saved hands, chart check and archive. One undo per deal.
+- **Misclick guard**: pre-flop calls and raises the chart says to fold, and any move that puts in 25bb or more, need a second tap (the button lights up and says why). Turn it off with the "Misclick guard" link under the action buttons.
 - **See the rest of the hand**: when a hand ends without a showdown, reveal the cards that would have come next, everyone's hole cards, and who would have won if it had been checked down. It's hindsight, so it isn't sent to Claude reviews.
 - **Hand archive**: every hand is kept as its written history (plus any review) until you erase it. "Download all hands" saves a .txt file and "Copy all hands" copies it, ready to paste into a Claude chat. In the Claude version the archive lives on your Claude account where the page's owner can read it, so Claude can pull your hands into a chat for review.
 - **Review grades**: Excellent, Good, Okay, Questionable, Mistake or Big mistake, color-coded in the review and the hand list.
@@ -85,7 +87,7 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 
 ## Updating the hosted site
 
-GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=22`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
+GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=23`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
 
 ## Files
 
