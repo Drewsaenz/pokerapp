@@ -162,6 +162,8 @@ function canAct(p) {
 function botDelay() {
   var hero = players()[HERO_SEAT];
   if (hero.folded) return 90;
+  // A replay skips ahead to your first decision
+  if (table.replaying && table.hand && !table.hand.heroActed) return 30;
   return table.settings.speed === "fast" ? 220 : 650;
 }
 
@@ -171,7 +173,7 @@ function shuffledDeck() {
   var deck = [];
   for (var r = 0; r < 13; r++) for (var s = 0; s < 4; s++) deck.push({ rank: r, suit: s });
   for (var i = deck.length - 1; i > 0; i--) {
-    var j = Math.floor(Math.random() * (i + 1));
+    var j = Math.floor(rand() * (i + 1));
     var t = deck[i]; deck[i] = deck[j]; deck[j] = t;
   }
   return deck;
@@ -331,7 +333,7 @@ function startingTableSize() {
 function tableChurn() {
   var notes = [];
   var n = seatCount();
-  if (n > 4 && Math.random() < 0.12) {
+  if (n > 4 && rand() < 0.12) {
     var leave = randomInt(1, n - 1);
     var gone = table.players[leave];
     table.players.splice(leave, 1);
@@ -339,7 +341,7 @@ function tableChurn() {
     if (leave < table.button) table.button -= 1;
     table.button = table.button % table.players.length;
     notes.push(gone.name + " leaves the table.");
-  } else if (n < MAX_PLAYERS && Math.random() < 0.15) {
+  } else if (n < MAX_PLAYERS && rand() < 0.15) {
     var at = randomInt(1, n);
     var fresh = makePlayer(nextBotName(), botBuyIn(), false);
     table.players.splice(at, 0, fresh);
@@ -380,6 +382,8 @@ function makePlayer(name, stack, isHero) {
 
 function newSession() {
   if (table.running) return;
+  table.replaying = null;
+  table.replaySaved = null;
   table.settings = readSettings();
   table.level = 0;
   table.handsAtLevel = 0;
@@ -470,12 +474,17 @@ function record(action) {
 }
 
 async function playHand() {
-  if (table.running || table.over) return;
+  if (table.running) return;
+  if (!table.replaying && table.replaySaved) restoreAfterReplay();
+  if (table.over) { renderAll(); return; }
   table.running = true;
   pendingHero = null;
 
+  var replay = table.replaying;
   var lock = table.settings.seat;
-  if (lock && lock !== "rotate") table.button = fixedSeatButton(lock);
+  if (!replay && lock && lock !== "rotate") table.button = fixedSeatButton(lock);
+  var seed = replay ? replay.seed : Math.floor(Math.random() * 4294967296);
+  randSource = seededRandom(seed);
   var b = blinds();
   var deck = shuffledDeck();
   players().forEach(function (p, seat) {
@@ -515,7 +524,14 @@ async function playHand() {
     sessionId: table.sessionId,
     at: Date.now(),
     review: null,
-    done: false
+    done: false,
+    seed: seed,
+    button: table.button,
+    settings: Object.assign({}, table.settings),
+    practice: !!replay,
+    replayOf: replay ? replay.no : null,
+    source: replay || null,
+    heroActed: false
   };
   table.viewing = table.hand;
   table.notice = "";
@@ -524,7 +540,7 @@ async function playHand() {
   post(seatOfPos("SB"), b.sb, "small blind");
   post(seatOfPos("BB"), b.bb, "big blind");
   // Live rooms: the first seat after the blinds sometimes posts a $5 straddle and acts last pre-flop
-  if (isLive() && seatCount() >= 4 && Math.random() < 0.3) {
+  if (isLive() && seatCount() >= 4 && rand() < 0.3) {
     var straddler = actingOrder("preflop")[0];
     if (players()[straddler].stack > b.bb * 10) {
       table.hand.straddle = Math.round(b.bb * 2.5);
@@ -549,9 +565,63 @@ async function playHand() {
   }
 
   settle();
+  randSource = Math.random;
   table.running = false;
-  recordHand(table.hand);
+  if (replay) table.replaying = null; // the real table comes back on the next deal
+  else recordHand(table.hand);
   renderAll();
+}
+
+// ===== PLAY IT AGAIN =====
+// Deals a finished hand again from the same seat, stacks and seed: same cards, same board,
+// and the bots repeat their choices until you do something different. Replays are practice:
+// they don't touch your stacks, stats, archive or reviews.
+function canReplay(h) {
+  return !!h && h.done && h.seed != null && !!h.settings && !table.running && !table.loading;
+}
+
+function replayHand(orig) {
+  if (!canReplay(orig)) return;
+  if (!table.replaySaved) table.replaySaved = {
+    players: table.players, button: table.button, level: table.level, handsAtLevel: table.handsAtLevel,
+    handNo: table.handNo, settings: table.settings, notice: table.notice, over: table.over, hand: table.hand
+  };
+  table.settings = Object.assign({}, orig.settings, { seat: "rotate", speed: table.settings.speed });
+  table.players = orig.seats.map(function (s) {
+    var p = makePlayer(s.name, s.stack, s.isHero);
+    p.style = s.style;
+    return p;
+  });
+  table.button = orig.button;
+  table.level = orig.level;
+  table.handNo = orig.no - 1;
+  table.notice = "";
+  table.over = false;
+  table.replaying = orig;
+  rangeOpen = false;
+  playHand();
+}
+
+// The real table, even while a replay is on the felt
+function realTable() {
+  return table.replaySaved || table;
+}
+
+function restoreAfterReplay() {
+  var s = table.replaySaved;
+  table.players = s.players;
+  table.button = s.button;
+  table.level = s.level;
+  table.handsAtLevel = s.handsAtLevel;
+  table.handNo = s.handNo;
+  table.notice = s.notice;
+  table.over = s.over;
+  var speed = table.settings.speed;
+  table.settings = s.settings;
+  table.settings.speed = speed;
+  table.replaying = null;
+  table.replaySaved = null;
+  table.hand = s.hand;
 }
 
 async function bettingRound(street) {
@@ -591,6 +661,7 @@ async function bettingRound(street) {
     var decision;
     if (p.isHero) {
       decision = await heroAct(ctx);
+      h.heroActed = true;
     } else {
       await sleep(botDelay());
       decision = street === "preflop" ? botPreflop(seat, ctx) : botPostflop(seat, ctx);
@@ -725,6 +796,7 @@ function settle() {
   h.finalStacks = ps.map(function (p) { return p.stack; });
   h.done = true;
   table.acting = null;
+  if (h.practice) return;
   table.sessionHands.unshift(h);
 
   if (table.settings.mode === "tournament" && hero.stack === 0) {
@@ -778,8 +850,8 @@ function limperCount() {
 // Live open size: $10-15 (5-7.5bb), $20-30 over a straddle, plus $3-5 per limper
 function liveOpenTo() {
   var h = table.hand;
-  var base = h.straddle ? h.straddle * (4 + Math.random() * 2) : h.bb * (5 + Math.random() * 2.5);
-  return Math.round(base + limperCount() * h.bb * (1.5 + Math.random()));
+  var base = h.straddle ? h.straddle * (4 + rand() * 2) : h.bb * (5 + rand() * 2.5);
+  return Math.round(base + limperCount() * h.bb * (1.5 + rand()));
 }
 
 // Pairs, suited aces and suited connectors: hands that make big, hidden hands in multiway pots
@@ -1403,16 +1475,25 @@ function renderControls() {
   }
 
   if (!table.running) {
-    var hero = players()[HERO_SEAT];
+    var hero = realTable().players[HERO_SEAT];
     var row = el("div", "controls-row");
     var next = el("button", "btn primary big", "Deal next hand");
     next.type = "button";
     next.id = "deal-next";
-    var cash = isCash();
-    var start = startingStack();
+    var real = realTable().settings;
+    var cash = real.mode !== "tournament";
+    var start = cash ? real.cashDepth * CASH_BLINDS.bb : TOURNEY_START;
     next.disabled = cash && hero.stack < CASH_BLINDS.bb;
     next.addEventListener("click", playHand);
     row.append(next);
+    var again = table.viewing;
+    if (canReplay(again)) {
+      var replayBtn = el("button", "btn ghost", "Play hand " + again.no + " again");
+      replayBtn.type = "button";
+      replayBtn.title = "Same seats, stacks and cards. The bots repeat their moves until you change yours. Practice only: not counted in your stats.";
+      replayBtn.addEventListener("click", function () { replayHand(again.practice ? again.source : again); });
+      row.append(replayBtn);
+    }
     if (cash && hero.stack < start) {
       var top = el("button", "btn", "Top up to " + fmtBB(start, CASH_BLINDS.bb));
       top.type = "button";
@@ -1540,7 +1621,7 @@ function renderPanel() {
     renderReview();
     return;
   }
-  $("hand-title").textContent = "Hand " + h.no + (h === table.hand && !h.done ? " · in progress" : "");
+  $("hand-title").textContent = (h.practice ? "Replay of hand " : "Hand ") + h.no + (h === table.hand && !h.done ? " · in progress" : "");
   $("hand-sub").textContent = "You: " + h.heroPos + " with " + cardsText(h.heroCards) + " · " + modeLabel(h.stage, h.mode) +
     " · " + fmtChips(h.sb) + "/" + fmtChips(h.bb) + (h.ante ? " ante " + fmtChips(h.ante) : "");
 
@@ -2149,6 +2230,10 @@ function renderReview() {
   if (h.review) renderFeedback(out, h.review);
   else if (!activeReview) out.replaceChildren();
 
+  if (h.practice) {
+    actions.append(el("p", "fb-note", "This was a replay of hand " + h.replayOf + ": practice only, so it isn't counted in your stats, saved to your hands, or sent for review. You knew the cards this time."));
+    return;
+  }
   if (sampleState === "ready") {
     var ask = el("button", "btn primary", h.review ? "Review again" : "Get Claude's feedback");
     ask.type = "button";
@@ -2191,15 +2276,16 @@ function round1(x) {
 }
 
 function tableSnapshot() {
+  var r = realTable();
   return {
-    settings: table.settings,
-    players: players().map(function (p) { return { name: p.name, stack: p.stack, style: p.style, isHero: p.isHero }; }),
-    button: table.button,
-    level: table.level,
-    handsAtLevel: table.handsAtLevel,
-    handNo: table.handNo,
+    settings: r.settings,
+    players: r.players.map(function (p) { return { name: p.name, stack: p.stack, style: p.style, isHero: p.isHero }; }),
+    button: r.button,
+    level: r.level,
+    handsAtLevel: r.handsAtLevel,
+    handNo: r.handNo,
     topUps: table.topUps,
-    over: table.over,
+    over: r.over,
     sessionId: table.sessionId,
     usedNames: Array.from(table.usedNames)
   };
@@ -2535,7 +2621,7 @@ function renderAll() {
 
 function renderSetupHint() {
   var hint = $("setup-hint");
-  var s = table.settings;
+  var s = realTable().settings;
   var next = readSettings();
   var changed = !!s && table.players.length > 0 &&
     (next.mode !== s.mode || next.tableSize !== s.tableSize ||
@@ -2591,6 +2677,7 @@ $("set-speed").addEventListener("change", function () {
 $("set-seat").addEventListener("change", function () {
   if (table.settings) {
     table.settings.seat = $("set-seat").value;
+    if (table.replaySaved) table.replaySaved.settings.seat = table.settings.seat;
     if (!table.running) saveTable();
   }
 });
