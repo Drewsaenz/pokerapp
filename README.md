@@ -65,6 +65,7 @@ A 9-handed table where you play full hands against eight bots, then get feedback
   - simulate a few hundred run-outs against those ranges to get their equity, without ever seeing your cards,
   - then value-bet, slow-play, c-bet, semi-bluff, bluff, raise, call or fold, at frequencies set by their style, sizing bets to the board.
 - **bb or $**: a switch in the options panel shows every amount in big blinds or in dollars ($1/$2 blinds, so 100bb is $200; chip counts in tournaments). Hand histories sent to Claude stay in big blinds. Buy-ins are listed in dollars ($200 default, up to $300).
+- **Avatars and player reads**: every bot has a cartoon avatar drawn from its name (never from its style). Set **Types** to Hidden and the TAG / LAG / Nit / Station labels come off the seats and out of the histories sent to Claude. Tap a player for a scouting card with what you've seen them do this session (how often they play and raise before the flop, bets vs calls after it, showdowns), then guess their type. A guess reveals the label for the rest of the session, and the Session panel keeps your score.
 - **Mini chart**: on every pre-flop decision, a colors-only chart in the table's corner shows the range for your spot with your hand enlarged and ringed in white, still in its chart color, and the chart's action above it. Tap it for the full range view.
 - **Chart on/off**: switch the chart off in the options bar to play unassisted: no mini chart, no range view, and the misclick guard stops quoting the chart (it still asks twice for 25bb+). Hands are still graded against the chart afterwards, and the Session panel compares your on-chart rate without the chart to with it. Turning the chart back on mid-hand counts that hand as assisted.
 - **Range view**: while deciding pre-flop, press R or tap Range view to see the full chart for your exact seat and situation (folded to you, limpers, facing a raise, a 3-bet, a 4-bet or an all-in), with your hand outlined and the chart's reasoning.
@@ -101,7 +102,7 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 
 ## Updating the hosted site
 
-GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=27`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
+GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=28`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
 
 ## Files
 
