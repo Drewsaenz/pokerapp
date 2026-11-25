@@ -655,6 +655,7 @@ function settle() {
   // The cards that would have been dealt next, in order, and everyone's hole cards
   h.runout = h.deck.slice(h.deck.length - (5 - h.board.length)).reverse();
   h.holeCards = ps.map(function (p) { return p.cards.slice(); });
+  h.revealed = true;
   var live = [];
   ps.forEach(function (p, seat) { if (!p.folded) live.push(seat); });
 
@@ -1159,7 +1160,6 @@ function renderTable() {
   var winnerSeats = new Set();
   if (h && h.done) players().forEach(function (p, s) { if (p.won > 0) winnerSeats.add(s); });
   var revealed = h && h.revealed && canShowRest(h) ? restOfHand(h) : null;
-  var revealSeats = new Set(revealed ? revealed.hands.map(function (x) { return x.seat; }) : []);
 
   players().forEach(function (p, seat) {
     var pt = seatPoint(seat, 44, 41);
@@ -1172,7 +1172,7 @@ function renderTable() {
     node.style.top = pt.y + "%";
 
     var cards = el("div", "seat-cards");
-    if (h && h.revealed && h.holeCards && revealSeats.has(seat)) {
+    if (h && h.done && h.holeCards && h.holeCards[seat] && h.revealed !== false) {
       h.holeCards[seat].forEach(function (c) { cards.append(cardEl(c, p.isHero ? "md" : "sm")); });
     } else if (!p.folded || p.isHero) {
       p.cards.forEach(function (c) {
@@ -1210,6 +1210,7 @@ function renderTable() {
   felt.append(dealer);
 
   if (!h) {
+    $("you-have").hidden = true;
     $("pot").textContent = "";
     $("board").replaceChildren();
     for (var s = 0; s < 5; s++) $("board").append(el("div", "pcard slot lg"));
@@ -1219,6 +1220,16 @@ function renderTable() {
   }
 
   $("pot").textContent = "Pot " + fmtBB(h.done && h.potWon !== undefined ? h.potWon : potTotal(), h.bb);
+  var heroP = players()[HERO_SEAT];
+  var youHave = $("you-have");
+  youHave.replaceChildren();
+  if (heroP.folded && !h.done) {
+    youHave.hidden = true;
+  } else {
+    youHave.hidden = false;
+    youHave.append(el("span", "you-label", heroP.folded ? "You folded" : "You have"),
+      el("span", "you-hand", describeHolding(h.heroCards, h.board)));
+  }
   var board = $("board");
   board.replaceChildren();
   for (var i = 0; i < 5; i++) {
@@ -1546,6 +1557,15 @@ function renderPanel() {
         sd.append(el("li", null, (s.seat === HERO_SEAT ? "You" : s.name) + " (" + s.pos + "): " + cardsText(s.cards) + " · " + s.hand));
       });
       res.append(sd);
+      if (h.holeCards && h.revealed !== false) {
+        var shown = h.showdown.map(function (s) { return s.seat; });
+        var folded = h.seats.map(function (x, seat) { return seat; }).filter(function (seat) { return shown.indexOf(seat) === -1 && h.holeCards[seat]; });
+        if (folded.length) {
+          res.append(el("p", "rest-folded", "Folded: " + folded.map(function (seat) {
+            return seatLabel(h, seat) + " " + cardsText(h.holeCards[seat]);
+          }).join(" · ")));
+        }
+      }
     }
     h.results.forEach(function (r) { res.append(el("p", "result-line", r.replace(/^You wins/, "You win").replace(/^You split/, "You split").replace(/^You gets/, "You get"))); });
     var net = el("p", "net " + (h.heroNet > 0 ? "up" : h.heroNet < 0 ? "down" : "flat"), "Your result: " + signedBB(h.heroNet, h.bb));
@@ -1810,6 +1830,42 @@ function handWords(hand) {
 }
 
 // What Hero actually holds on a street, so reviews don't invent draws: "; Hero has Pair of Jacks, no draw"
+// Plain-English holding: "Top pair, King kicker · flush draw", "Overpair (Queens)", "KJ suited"
+function describeHolding(hole, board) {
+  if (!board.length) {
+    var n = handNotation(hole[0].rank >= hole[1].rank ? hole : [hole[1], hole[0]]);
+    return n.length === 2 ? "Pocket " + RANK_PLURAL[hole[0].rank] : handWords(n);
+  }
+  var best = evaluateHand(hole.concat(board));
+  var boardOnly = evaluateHand(board);
+  var cat = best.score[0];
+  var ranks = Array.from(new Set(board.map(function (c) { return c.rank; }))).sort(function (a, b) { return b - a; });
+  var high = Math.max(hole[0].rank, hole[1].rank);
+  var text = best.name;
+  if (cat > 0 && cat === boardOnly.score[0] && best.score[1] === boardOnly.score[1]) {
+    text = best.name + " on the board (" + RANK_WORDS[high] + " high)";
+  } else if (cat === 1) {
+    var pr = best.score[1];
+    if (hole[0].rank === hole[1].rank) {
+      text = (pr > ranks[0] ? "Overpair" : "Pocket pair under the board") + " (" + RANK_PLURAL[pr] + ")";
+    } else {
+      var kicker = hole[0].rank === pr ? hole[1].rank : hole[0].rank;
+      var place = pr === ranks[0] ? "Top pair" : (pr === ranks[1] ? "Middle pair" : "Bottom pair");
+      text = place + " (" + RANK_PLURAL[pr] + "), " + RANK_WORDS[kicker] + " kicker";
+    }
+  } else if (cat === 0) {
+    text = RANK_WORDS[high] + " high";
+  }
+  var draws = [];
+  if (board.length < 5 && cat < 4) {
+    var d = drawInfo(hole, board);
+    if (d.flush) draws.push("flush draw");
+    if (d.straightOuts >= 2) draws.push("open-ended straight draw");
+    else if (d.straightOuts === 1) draws.push("gutshot");
+  }
+  return text + (draws.length ? " · " + draws.join(" + ") : "");
+}
+
 function heroHolding(h, streetAction) {
   var foldedBefore = h.actions.slice(0, h.actions.indexOf(streetAction)).some(function (x) { return x.isHero && x.type === "fold"; });
   if (foldedBefore) return "";
@@ -1824,7 +1880,8 @@ function heroHolding(h, streetAction) {
     if (d.straightOuts >= 2) draws.push("open-ended straight draw");
     else if (d.straightOuts === 1) draws.push("gutshot straight draw");
   }
-  return "; Hero has " + made + ", " + (draws.length ? draws.join(" and ") : (streetAction.board.length < 5 ? "no draw" : "final hand"));
+  return "; Hero has " + made + ", " + (draws.length ? draws.join(" and ") : (streetAction.board.length < 5 ? "no draw" : "final hand")) +
+    " (" + describeHolding(h.heroCards, streetAction.board) + ")";
 }
 
 function historyLines(h) {
