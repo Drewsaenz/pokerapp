@@ -64,13 +64,27 @@ function el(tag, className, text) {
   return node;
 }
 
-function fmtBB(chips, bb) {
+// Amounts show in big blinds or in dollars (chips in tournaments), per the player's choice.
+// Hand histories for Claude always use big blinds.
+let displayUnit = "bb";
+let historyMode = false;
+try { if (localStorage.getItem("pokerapp.unit") === "money") displayUnit = "money"; } catch (e) { /* default to bb */ }
+
+function bbText(chips, bb) {
   var v = Math.round((chips / bb) * 10) / 10;
   return (Number.isInteger(v) ? String(v) : v.toFixed(1)) + "bb";
 }
 
+function showMoney() {
+  return displayUnit === "money" && !historyMode;
+}
+
+function fmtBB(chips, bb) {
+  return showMoney() ? fmtChips(Math.round(chips)) : bbText(chips, bb);
+}
+
 function fmtChips(chips) {
-  var money = table.settings && table.settings.mode === "cash";
+  var money = table.settings && isCash();
   return (money ? "$" : "") + chips.toLocaleString("en-US");
 }
 
@@ -267,14 +281,32 @@ function readSettings() {
   };
 }
 
+function isCash() {
+  return !table.settings || table.settings.mode !== "tournament";
+}
+
+function isLive() {
+  return !!table.settings && table.settings.mode === "live";
+}
+
+function modeLabel(stage, mode) {
+  return mode === "live" ? "Live $1/2" : GAME_STAGES[stage].label;
+}
+
+// Live card-room bots buy in for $200-$300
+function botBuyIn() {
+  if (!isLive()) return startingStack();
+  return randomInt(100, 150) * CASH_BLINDS.bb;
+}
+
 function syncSettingsVisibility() {
-  var cash = $("set-mode").value === "cash";
+  var cash = $("set-mode").value !== "tournament";
   $("field-depth").hidden = !cash;
   $("field-level").hidden = cash;
 }
 
 function blinds() {
-  if (table.settings.mode === "cash") return CASH_BLINDS;
+  if (isCash()) return CASH_BLINDS;
   return TOURNEY_LEVELS[Math.min(table.level, TOURNEY_LEVELS.length - 1)];
 }
 
@@ -298,7 +330,7 @@ function tableChurn() {
     notes.push(gone.name + " leaves the table.");
   } else if (n < MAX_PLAYERS && Math.random() < 0.15) {
     var at = randomInt(1, n);
-    var fresh = makePlayer(nextBotName(), startingStack(), false);
+    var fresh = makePlayer(nextBotName(), botBuyIn(), false);
     table.players.splice(at, 0, fresh);
     if (at <= table.button) table.button += 1;
     notes.push(fresh.name + " sits down.");
@@ -308,11 +340,11 @@ function tableChurn() {
 }
 
 function startingStack() {
-  return table.settings.mode === "cash" ? table.settings.cashDepth * CASH_BLINDS.bb : TOURNEY_START;
+  return isCash() ? table.settings.cashDepth * CASH_BLINDS.bb : TOURNEY_START;
 }
 
 function currentStage() {
-  if (table.settings.mode === "cash") return "cash";
+  if (isCash()) return "cash";
   if (table.level <= 2) return "early";
   if (table.level <= 6) return "mid";
   if (table.level <= 9) return "late";
@@ -331,7 +363,7 @@ function makePlayer(name, stack, isHero) {
   return {
     name: name, stack: stack, isHero: isHero, cards: [], folded: false, allIn: false,
     bet: 0, total: 0, startStack: stack, pos: "", lastAction: "", shown: false, won: 0,
-    style: isHero ? null : randomStyle(), range: null, aggr: 0
+    style: isHero ? null : randomStyle(isLive()), range: null, aggr: 0
   };
 }
 
@@ -350,13 +382,15 @@ function newSession() {
   table.players = [];
   var size = startingTableSize();
   for (var i = 0; i < size; i++) {
-    table.players.push(i === HERO_SEAT ? makePlayer("You", start, true) : makePlayer(nextBotName(), start, false));
+    table.players.push(i === HERO_SEAT ? makePlayer("You", start, true) : makePlayer(nextBotName(), botBuyIn(), false));
   }
   table.button = randomInt(0, size - 1);
   $("session-review-out").replaceChildren();
   startSessionRecord();
   saveTable();
   renderProgress();
+  renderSetupHint();
+  renderUnitToggle();
   playHand();
 }
 
@@ -364,15 +398,15 @@ function newSession() {
 function betweenHands() {
   var notes = [];
   var start = startingStack();
-  var cash = table.settings.mode === "cash";
+  var cash = isCash();
   var alive = players().filter(function (p) { return p.stack > 0; });
   var avg = alive.length ? Math.round(alive.reduce(function (s, p) { return s + p.stack; }, 0) / alive.length / 100) * 100 : start;
 
   players().forEach(function (p, seat) {
     if (p.isHero) return;
     if (cash && p.stack < start * 0.4) {
-      notes.push(p.name + " reloads to " + fmtBB(start, CASH_BLINDS.bb) + ".");
-      p.stack = start;
+      p.stack = botBuyIn();
+      notes.push(p.name + " reloads to " + fmtBB(p.stack, CASH_BLINDS.bb) + ".");
     } else if (!cash && p.stack === 0) {
       table.usedNames.delete(p.name);
       var fresh = makePlayer(nextBotName(), Math.max(avg, blinds().bb * 10), false);
@@ -443,6 +477,9 @@ async function playHand() {
   table.hand = {
     no: ++table.handNo,
     mode: table.settings.mode,
+    live: isLive(),
+    straddle: 0,
+    straddleSeat: null,
     stage: currentStage(),
     level: table.level,
     sb: b.sb, bb: b.bb, ante: b.ante,
@@ -473,6 +510,15 @@ async function playHand() {
   if (b.ante) postAnte(seatOfPos("BB"), b.ante);
   post(seatOfPos("SB"), b.sb, "small blind");
   post(seatOfPos("BB"), b.bb, "big blind");
+  // Live rooms: the first seat after the blinds sometimes posts a $5 straddle and acts last pre-flop
+  if (isLive() && seatCount() >= 4 && Math.random() < 0.3) {
+    var straddler = actingOrder("preflop")[0];
+    if (players()[straddler].stack > b.bb * 10) {
+      table.hand.straddle = Math.round(b.bb * 2.5);
+      table.hand.straddleSeat = straddler;
+      post(straddler, table.hand.straddle, "straddle");
+    }
+  }
   renderAll();
 
   await bettingRound("preflop");
@@ -498,8 +544,13 @@ async function playHand() {
 async function bettingRound(street) {
   var h = table.hand;
   var order = actingOrder(street);
-  var currentBet = street === "preflop" ? h.bb : 0;
-  var minRaise = h.bb;
+  if (street === "preflop" && h.straddle) {
+    // The straddler acts last before the flop
+    var at = order.indexOf(h.straddleSeat);
+    order = order.slice(at + 1).concat(order.slice(0, at + 1));
+  }
+  var currentBet = street === "preflop" ? (h.straddle || h.bb) : 0;
+  var minRaise = street === "preflop" ? (h.straddle || h.bb) : h.bb;
   var raises = 0;
   var lastRaiser = null;
   var raiserAllIn = false;
@@ -581,8 +632,8 @@ function applyDecision(seat, d, ctx) {
   if (p.isHero && ctx.street === "preflop") h.vpip = true;
 
   var kind = type === "call" ? "call" : (ctx.currentBet === 0 ? "bet" : "raise");
-  p.lastAction = (kind === "call" ? "Call " : kind === "bet" ? "Bet " : "Raise ") + fmtBB(kind === "call" ? add : to, h.bb) +
-    (p.allIn ? " · all-in" : "");
+  // Stored as parts so the seat label can follow the bb / $ switch
+  p.lastAction = { verb: kind === "call" ? "Call" : kind === "bet" ? "Bet" : "Raise", chips: kind === "call" ? add : to, allIn: p.allIn };
   record({ street: ctx.street, seat: seat, type: kind, to: to, add: add, allIn: p.allIn });
   if (ctx.street === "preflop") {
     updateRange(p, kind, ctx);
@@ -703,8 +754,26 @@ function callPrice(seat, ctx) {
 }
 
 function limperCount() {
-  var bb = table.hand.bb;
-  return players().filter(function (p) { return !p.folded && p.pos !== "BB" && p.bet >= bb; }).length;
+  var h = table.hand;
+  var level = h.straddle || h.bb;
+  return players().filter(function (p, s) {
+    return !p.folded && p.pos !== "BB" && s !== h.straddleSeat && p.bet >= level;
+  }).length;
+}
+
+// Live open size: $10-15 (5-7.5bb), $20-30 over a straddle, plus $3-5 per limper
+function liveOpenTo() {
+  var h = table.hand;
+  var base = h.straddle ? h.straddle * (4 + Math.random() * 2) : h.bb * (5 + Math.random() * 2.5);
+  return Math.round(base + limperCount() * h.bb * (1.5 + Math.random()));
+}
+
+// Pairs, suited aces and suited connectors: hands that make big, hidden hands in multiway pots
+function isSpeculative(hand) {
+  if (hand.length === 2) return true;
+  if (hand[2] !== "s") return false;
+  var order = "23456789TJQKA";
+  return hand[0] === "A" || order.indexOf(hand[0]) - order.indexOf(hand[1]) <= 2;
 }
 
 // The chart scenario for a pre-flop spot, or null when the spot is outside what the chart covers
@@ -713,7 +782,8 @@ function preflopScenario(seat, ctx) {
   var h = table.hand;
   if (ctx.raises > 1) return null;
   if (ctx.raises === 1 && (ctx.raiserAllIn || ctx.toCall >= 0.35 * (p.stack + p.bet))) return null;
-  if (ctx.raises === 0 && p.pos === "BB") return null;
+  if (ctx.raises === 0 && ctx.toCall === 0) return null;
+  if (ctx.raises === 0 && h.straddle && (p.pos === "SB" || p.pos === "BB")) return null;
   var effBB = Math.max(1, Math.round(effectiveStack(seat) / h.bb));
   var scenario = {
     stage: h.stage,
@@ -744,16 +814,39 @@ function botPreflop(seat, ctx) {
   var pShove = handPercentile(hand, true);
   var maxTo = p.stack + p.bet;
 
-  if (ctx.raises === 0 && p.pos === "BB") {
-    return pPlay <= 0.1 ? sizedRaise(seat, ctx, bb * (3.5 + limperCount())) : { type: "check" };
+  var live = table.hand.live;
+  var st = styleOf(p);
+  if (ctx.raises === 0 && ctx.toCall === 0) {
+    var isoTo = live ? liveOpenTo() : bb * (3.5 + limperCount());
+    return pPlay <= 0.1 ? sizedRaise(seat, ctx, isoTo) : { type: "check" };
+  }
+  if (live && ctx.raises === 0 && table.hand.straddle && (p.pos === "SB" || p.pos === "BB")) {
+    if (pPlay <= 0.06) return sizedRaise(seat, ctx, liveOpenTo());
+    return pPlay <= (p.pos === "BB" ? 0.3 : 0.18) * st.call ? { type: "call" } : { type: "fold" };
   }
 
   var sc = preflopScenario(seat, ctx);
   if (sc) {
     var rec = styledPreflop(seat, ctx, sc);
+    if (live && sc.stack !== "short") {
+      // Stations raise only their best hands and limp the rest
+      if (ctx.raises === 0 && rec === "Raise" && p.style === "CALL" && pPlay > 0.06) rec = "Call";
+      // Loose players limp in, and over-limp behind other limpers
+      if (ctx.raises === 0 && rec === "Fold" && pPlay <= (LIVE_LIMP[p.style] || 0) + (limperCount() ? 0.08 : 0)) rec = "Call";
+      // Passive players 3-bet only premiums (JJ+, AK); the rest of their 3-bets become calls
+      if (rec === "3-Bet" && (p.style === "CALL" || p.style === "NIT") && pPlay > 0.035) rec = "Call";
+      // Facing a raise: call wide, wider still after limping and with more players in
+      if (ctx.raises === 1 && rec === "Fold") {
+        var blindIn = p.pos === "BB" ? bb : (p.pos === "SB" ? table.hand.sb : 0);
+        var limped = p.bet > blindIn;
+        var loose = (LIVE_CALL[p.style] || 0.15) * (limped ? 1.4 : 1) * (ctx.toCall <= bb * 8 ? 1 : 0.5) +
+          0.04 * callersOfBet(seat, ctx);
+        if (pPlay <= Math.min(loose, 0.6)) rec = "Call";
+      }
+    }
     if (rec === "All-In") return { type: "raise", to: maxTo };
     if (rec === "Call") return { type: "call" };
-    if (rec === "Raise") return sizedRaise(seat, ctx, bb * ((sc.stack === "short" ? 2.1 : 2.5) + limperCount()));
+    if (rec === "Raise") return sizedRaise(seat, ctx, live && sc.stack !== "short" ? liveOpenTo() : bb * ((sc.stack === "short" ? 2.1 : 2.5) + limperCount()));
     if (rec === "3-Bet") {
       var callers = players().filter(function (x, s) {
         return s !== ctx.lastRaiser && !x.folded && x.bet === ctx.currentBet;
@@ -812,6 +905,80 @@ function heroActsAfter(seat) {
   return order.indexOf(players()[HERO_SEAT].pos) > order.indexOf(players()[seat].pos);
 }
 
+// Live isolation size: $12-15 (4-5x a straddle) plus about $4 per limper
+function liveIsoSize() {
+  var h = table.hand;
+  return Math.round((h.straddle ? h.straddle * 4 : h.bb * 6.5) + limperCount() * h.bb * 2);
+}
+
+// Live $1/2 adjustments on top of the online-style chart
+function liveAdjust(base, sc, rec, ctx) {
+  var h = table.hand;
+  var hand = sc.hand;
+  var p = handPercentile(hand, false);
+  var group = positionGroup(sc.hero);
+  var offsuit = hand.length === 3 && hand[2] === "o";
+  var late = group === "late";
+  var out = Object.assign({}, base);
+
+  if (sc.spot === "unopened") {
+    var limpers = limperCount();
+    var openLine = rec.lines[0];
+    if (limpers) {
+      out.spot = "Limpers in front of you";
+      // Isolate strong hands big, over-limp hands that make big hands multiway, fold the rest
+      if (p <= openLine * 0.8) {
+        out.action = "Raise";
+        out.explanation = "Live $1/2 with " + limpers + (limpers === 1 ? " limper" : " limpers") + ": isolate your strong hands with a big raise, about " +
+          fmtChips(liveIsoSize()) + ", so you play against fewer, weaker hands. " + hand + " is in the top " + pct(p) + ", strong enough to raise.";
+      } else if (isSpeculative(hand) && (late || p <= 0.35)) {
+        out.action = "Call";
+        out.explanation = "Live $1/2 with limpers: " + hand + " isn't strong enough to isolate, but it makes sets, straights and flushes that get paid in " +
+          "multiway pots. Over-limp" + (late ? " in position" : "") + " and play for a big hand.";
+      } else {
+        out.action = "Fold";
+        out.explanation = "Live $1/2 with limpers: " + hand + " is too weak to isolate and doesn't make the big hands that win multiway pots, so fold.";
+      }
+      return out;
+    }
+    // Folded to you: same range, but tighter with dominated offsuit hands early, and live sizing
+    if (rec.action === "Raise" && offsuit && (group === "early" || group === "middle") && p > openLine * 0.6) {
+      out.action = "Fold";
+      out.explanation = "Live $1/2: offsuit hands like " + hand + " get dominated in the big multiway pots these games create, so fold them from " +
+        sc.hero + " even though an online chart opens them.";
+      return out;
+    }
+    if (rec.action === "Raise") out.explanation = rec.explanation + " Live sizing: open to about " + fmtChips(h.straddle ? h.straddle * 4 : h.bb * 6.5) + ".";
+    return out;
+  }
+
+  // Facing a raise: live opens are big and draw callers, so call tighter unless the hand plays well multiway
+  var callers = callersOfBet(HERO_SEAT, ctx);
+  var threeBet = rec.lines[0];
+  var callTop = rec.lines[1];
+  var bigOpen = ctx.currentBet >= h.bb * 5;
+  var shrink = Math.pow(0.7, callers) * (bigOpen ? 0.8 : 1);
+  var callLine = threeBet + (callTop - threeBet) * shrink;
+  // Deep in a live game, pairs (anywhere) and suited speculative hands (in position) can call to hit a big hand
+  var setMine = sc.stackBB >= 100 && isSpeculative(hand) && (hand.length === 2 || late) && p <= 0.6;
+  var speculativeCall = false;
+  if (p <= threeBet) out.action = "3-Bet";
+  else if (p <= callLine) out.action = "Call";
+  else if (setMine) { out.action = "Call"; speculativeCall = true; }
+  else out.action = "Fold";
+  if (!speculativeCall) {
+    out.explanation = "Live $1/2: the " + sc.opener + " opened to " + fmtChips(ctx.currentBet) +
+      (callers ? " and " + callers + (callers === 1 ? " player has" : " players have") + " already called" : "") +
+      ". Big live opens and multiway pots shrink your calling range: 3-bet about the top " + pct(threeBet) +
+      " for value and call only about the next " + pct(callLine - threeBet) + ". " + hand + " is in the top " + pct(p) + ".";
+  } else {
+    out.explanation = "Live $1/2: " + hand + " is outside the normal calling range, but deep-stacked " +
+      (hand.length === 2 ? "pairs set-mine" : "suited hands play") + " well in multiway pots where opponents pay off big hands. Call" +
+      (late ? " in position" : "") + " and fold if you miss.";
+  }
+  return out;
+}
+
 // The chart's answer for any hero pre-flop decision
 function heroChartFor(ctx, handOverride) {
   var p = players()[HERO_SEAT];
@@ -820,12 +987,13 @@ function heroChartFor(ctx, handOverride) {
   if (sc && handOverride) sc.hand = handOverride;
   if (sc) {
     var rec = getRecommendation(sc);
-    return {
+    var base = {
       spot: sc.spot === "unopened" ? "Folded to you" : "Facing a raise",
       action: rec.action,
       explanation: rec.explanation,
       limpers: ctx.raises === 0 ? limperCount() : 0
     };
+    return h.live && sc.stack !== "short" ? liveAdjust(base, sc, rec, ctx) : base;
   }
   var hand = handOverride || handNotation(p.cards);
   var pPlay = handPercentile(hand, false);
@@ -833,11 +1001,24 @@ function heroChartFor(ctx, handOverride) {
   var tight = h.stage === "late" || h.stage === "final" ? 0.8 : 1;
   var stageNote = tight < 1 ? " " + STAGE_NOTES[h.stage] : "";
 
-  if (ctx.raises === 0 && p.pos === "BB") {
+  if (ctx.raises === 0 && ctx.toCall === 0) {
+    var straddler = h.straddle && p.pos !== "BB";
     return {
-      spot: "Limpers, you're in the big blind",
+      spot: straddler ? "Limpers, you have the straddle option" : "Limpers, you're in the big blind",
       action: pPlay <= 0.1 ? "Raise" : "Check",
-      explanation: "Only limpers in front of you. Raise your top 10% or so to punish the limps, and check everything else to see a free flop. " +
+      explanation: "Only limpers in front of you" + (straddler ? " and you straddled" : "") + ". Raise your top 10% or so to punish the limps" +
+        (h.live ? " (about " + fmtChips(liveIsoSize()) + ")" : "") + ", and check everything else to see a free flop. " +
+        hand + " is in the top " + pct(pPlay) + "."
+    };
+  }
+
+  if (ctx.raises === 0 && h.straddle && (p.pos === "SB" || p.pos === "BB")) {
+    var defend = p.pos === "BB" ? 0.25 : 0.15;
+    return {
+      spot: "Facing the straddle from the " + p.pos,
+      action: pPlay <= 0.06 ? "Raise" : (pPlay <= defend ? "Call" : "Fold"),
+      explanation: "The " + fmtChips(h.straddle) + " straddle makes this a bigger, deeper-priced pot and you'll be out of position. " +
+        "Raise only premiums (about the top 6%), call with the next " + pct(defend - 0.06) + " of hands that play well multiway, and fold the rest. " +
         hand + " is in the top " + pct(pPlay) + "."
     };
   }
@@ -912,7 +1093,15 @@ function raisePresets(ctx) {
   var minTo = ctx.currentBet + ctx.minRaise;
   var list = [];
   if (ctx.street === "preflop") {
-    if (ctx.raises === 0) {
+    if (ctx.raises === 0 && table.hand.live) {
+      // Live sizes: $12 / $15 (or 4x / 5x a straddle) plus $4 per limper
+      var unit = table.hand.straddle;
+      var perLimper = limperCount() * bb * 2;
+      [unit ? unit * 4 : bb * 6, unit ? unit * 5 : bb * 7.5].forEach(function (to) {
+        to = Math.round(to + perLimper);
+        list.push({ label: fmtChips(to), to: to });
+      });
+    } else if (ctx.raises === 0) {
       var limpers = limperCount();
       list.push({ label: "2.5bb", to: bb * (2.5 + limpers) });
       list.push({ label: "3bb", to: bb * (3 + limpers) });
@@ -996,7 +1185,10 @@ function renderTable() {
     var stack = el("div", "seat-stack", p.allIn && !done ? "All-in" : fmtBB(p.stack, bb));
     stack.title = fmtChips(p.stack);
     plate.append(top, stack);
-    var act = el("div", "seat-act", winnerSeats.has(seat) ? "Wins " + fmtBB(p.won, bb) : p.lastAction);
+    var last = p.lastAction && typeof p.lastAction === "object"
+      ? p.lastAction.verb + " " + fmtBB(p.lastAction.chips, bb) + (p.lastAction.allIn ? " · all-in" : "")
+      : p.lastAction;
+    var act = el("div", "seat-act", winnerSeats.has(seat) ? "Wins " + fmtBB(p.won, bb) : last);
     node.append(cards, plate, act);
     felt.append(node);
 
@@ -1021,7 +1213,7 @@ function renderTable() {
     $("board").replaceChildren();
     for (var s = 0; s < 5; s++) $("board").append(el("div", "pcard slot lg"));
     var b = blinds();
-    $("stage-line").textContent = GAME_STAGES[currentStage()].label + " · " + fmtChips(b.sb) + "/" + fmtChips(b.bb) + " · your saved table";
+    $("stage-line").textContent = modeLabel(currentStage(), table.settings.mode) + " · " + fmtChips(b.sb) + "/" + fmtChips(b.bb) + " · your saved table";
     return;
   }
 
@@ -1037,7 +1229,7 @@ function renderTable() {
       board.append(ghost);
     } else board.append(el("div", "pcard slot lg"));
   }
-  var stageLabel = GAME_STAGES[h.stage].label;
+  var stageLabel = modeLabel(h.stage, h.mode) + (h.straddle ? " · " + fmtChips(h.straddle) + " straddle" : "");
   $("stage-line").textContent = stageLabel + " · " + fmtChips(h.sb) + "/" + fmtChips(h.bb) + (h.ante ? " · ante " + fmtChips(h.ante) : "") +
     " · Hand " + h.no;
 }
@@ -1058,36 +1250,75 @@ function rangeHandAt(r, c) {
   return r < c ? RANGE_RANKS[r] + RANGE_RANKS[c] + "s" : RANGE_RANKS[c] + RANGE_RANKS[r] + "o";
 }
 
-function renderRangeView() {
-  var box = $("range-view");
-  var ctx = pendingHero && pendingHero.ctx;
-  box.replaceChildren();
-  if (!rangeOpen || !ctx || ctx.street !== "preflop") { box.hidden = true; return; }
-  box.hidden = false;
+let rangeCache = { ctx: null, data: null };
 
+// The chart's action for every starting hand in the current decision, computed once per decision
+function rangeData(ctx) {
+  if (rangeCache.ctx === ctx) return rangeCache.data;
   var me = players()[HERO_SEAT];
-  var mine = handNotation(me.cards);
-  var myChart = heroChartFor(ctx);
+  var cells = [];
   var combos = {};
-  var grid = el("div", "range-grid");
   for (var r = 0; r < 13; r++) {
     for (var c = 0; c < 13; c++) {
       var hand = rangeHandAt(r, c);
       var chart = heroChartFor(ctx, hand);
       var action = chart ? chart.action : "Fold";
-      var style = RANGE_STYLE[action] || RANGE_STYLE.Fold;
       combos[action] = (combos[action] || 0) + (hand.length === 2 ? 6 : (hand[2] === "s" ? 4 : 12));
-      var cell = el("div", "range-cell " + style[0] + (hand === mine ? " mine" : "") + (r === c ? " pair" : ""), hand);
-      cell.title = hand + ": " + style[1];
-      grid.append(cell);
+      cells.push({ hand: hand, action: action, pair: r === c });
     }
   }
+  var data = { cells: cells, combos: combos, mine: handNotation(me.cards), myChart: heroChartFor(ctx) };
+  rangeCache = { ctx: ctx, data: data };
+  return data;
+}
+
+// Colors-only chart in the corner of the table, with the player's hand marked
+function renderMiniRange() {
+  var box = $("mini-range");
+  var ctx = pendingHero && pendingHero.ctx;
+  box.replaceChildren();
+  if (!ctx || ctx.street !== "preflop") { box.hidden = true; return; }
+  box.hidden = false;
+  var data = rangeData(ctx);
+  var myAction = data.myChart ? data.myChart.action : "Fold";
+  var myStyle = RANGE_STYLE[myAction] || RANGE_STYLE.Fold;
+  var label = el("span", "mini-label");
+  label.append(document.createTextNode("Chart "), el("strong", "mini-act " + myStyle[0], myStyle[1]));
+  var grid = el("span", "mini-grid");
+  data.cells.forEach(function (cell) {
+    var style = RANGE_STYLE[cell.action] || RANGE_STYLE.Fold;
+    grid.append(el("span", "mini-cell " + style[0] + (cell.hand === data.mine ? " mine" : "")));
+  });
+  box.append(label, grid);
+  box.title = data.mine + ": chart says " + myStyle[1].toLowerCase() + ". Tap for the full range view.";
+}
+
+function renderRangeView() {
+  var box = $("range-view");
+  var ctx = pendingHero && pendingHero.ctx;
+  renderMiniRange();
+  box.replaceChildren();
+  if (!rangeOpen || !ctx || ctx.street !== "preflop") { box.hidden = true; return; }
+  box.hidden = false;
+
+  var me = players()[HERO_SEAT];
+  var data = rangeData(ctx);
+  var mine = data.mine;
+  var myChart = data.myChart;
+  var combos = data.combos;
+  var grid = el("div", "range-grid");
+  data.cells.forEach(function (cell) {
+    var style = RANGE_STYLE[cell.action] || RANGE_STYLE.Fold;
+    var node = el("div", "range-cell " + style[0] + (cell.hand === mine ? " mine" : "") + (cell.pair ? " pair" : ""), cell.hand);
+    node.title = cell.hand + ": " + style[1];
+    grid.append(node);
+  });
 
   var effBB = Math.round(effectiveStack(HERO_SEAT) / table.hand.bb);
   var head = el("header", "range-head");
   var title = el("div");
   title.append(el("h3", null, (myChart ? myChart.spot : "Pre-flop") + " · " + me.pos),
-    el("p", "range-sub", effBB + "bb effective · " + GAME_STAGES[table.hand.stage].label +
+    el("p", "range-sub", effBB + "bb effective · " + modeLabel(table.hand.stage, table.hand.mode) + (table.hand.straddle ? " (straddled)" : "") +
       (ctx.raises ? " · " + players()[ctx.lastRaiser].pos + " raised last" : "")));
   var hide = el("button", "btn ghost small", "Hide");
   hide.type = "button";
@@ -1152,7 +1383,7 @@ function renderControls() {
     var next = el("button", "btn primary big", "Deal next hand");
     next.type = "button";
     next.id = "deal-next";
-    var cash = table.settings.mode === "cash";
+    var cash = isCash();
     var start = startingStack();
     next.disabled = cash && hero.stack < CASH_BLINDS.bb;
     next.addEventListener("click", playHand);
@@ -1218,14 +1449,16 @@ function renderControls() {
   if (canRaise) {
     var form = el("form", "custom-raise");
     var minTo = Math.min(maxTo, ctx.currentBet + ctx.minRaise);
-    var label = el("label", null, verb + " (bb)");
+    var money = showMoney();
+    var unitSize = money ? 1 : bb;
+    var label = el("label", null, verb + (money ? (isCash() ? " ($)" : " (chips)") : " (bb)"));
     label.htmlFor = "custom-amount";
     var input = el("input");
     input.id = "custom-amount";
     input.type = "number";
-    input.step = "0.5";
-    input.min = String(Math.round((minTo / bb) * 10) / 10);
-    input.max = String(Math.round((maxTo / bb) * 10) / 10);
+    input.step = money ? "1" : "0.5";
+    input.min = String(Math.round((minTo / unitSize) * 10) / 10);
+    input.max = String(Math.round((maxTo / unitSize) * 10) / 10);
     input.placeholder = input.min + "–" + input.max;
     var go = el("button", "btn ghost", verb);
     go.type = "submit";
@@ -1233,7 +1466,7 @@ function renderControls() {
     form.append(label, input, go, err);
     form.addEventListener("submit", function (e) {
       e.preventDefault();
-      var chips = Math.round(parseFloat(input.value) * bb);
+      var chips = Math.round(parseFloat(input.value) * unitSize);
       if (!isFinite(chips) || chips < minTo) {
         err.textContent = "Minimum is " + fmtBB(minTo, bb) + ".";
         return;
@@ -1283,7 +1516,7 @@ function renderPanel() {
     return;
   }
   $("hand-title").textContent = "Hand " + h.no + (h === table.hand && !h.done ? " · in progress" : "");
-  $("hand-sub").textContent = "You: " + h.heroPos + " with " + cardsText(h.heroCards) + " · " + GAME_STAGES[h.stage].label +
+  $("hand-sub").textContent = "You: " + h.heroPos + " with " + cardsText(h.heroCards) + " · " + modeLabel(h.stage, h.mode) +
     " · " + fmtChips(h.sb) + "/" + fmtChips(h.bb) + (h.ante ? " ante " + fmtChips(h.ante) : "");
 
   if (h.notice) log.append(el("li", "log-notice", h.notice));
@@ -1562,9 +1795,21 @@ function renderArchive() {
 // ===== HAND HISTORY TEXT (for Claude) =====
 
 function historyText(h) {
+  historyMode = true;
+  try {
+    return historyLines(h);
+  } finally {
+    historyMode = false;
+  }
+}
+
+function historyLines(h) {
   var bb = h.bb;
   var lines = [];
-  var game = h.mode === "cash"
+  var game = h.mode === "live"
+    ? "Live $1/2 cash game in a Texas card room (big opens, lots of limping, multiway pots), blinds $" + h.sb + "/$" + h.bb +
+      (h.straddle ? ", $" + h.straddle + " straddle posted by the " + h.seats[h.straddleSeat].pos + (h.straddleSeat === HERO_SEAT ? " (Hero)" : "") : "")
+    : h.mode === "cash"
     ? "Cash game, blinds $" + h.sb + "/$" + h.bb
     : "Tournament, " + GAME_STAGES[h.stage].label.replace("Tournament · ", "").toLowerCase() + " stage, level " + (h.level + 1) +
       ": blinds " + h.sb + "/" + h.bb + (h.ante ? ", big-blind ante " + h.ante : "");
@@ -1642,11 +1887,19 @@ const BOT_RULES =
   "actions in the hand, simulate equity against it, and then value-bet, slow-play, c-bet, semi-bluff, bluff, raise, call " +
   "or fold with frequencies set by their style. They never see Hero's cards.";
 
+const LIVE_RULES =
+  "This hand simulates a live $1/2 card room in Texas: opens of $10-15 (more over limpers or a straddle), frequent limping and " +
+  "limp-calling, multiway pots, occasional $5 straddles, and a table mostly of calling stations and loose players. Passive " +
+  "players 3-bet only premium hands, and size their post-flop bets by strength (small = medium hands, big = strong). Judge " +
+  "Hero's sizing and hand selection for that game, not an online one: bigger opens and isolation raises, value-bet heavily, " +
+  "bluff rarely, and respect big bets and raises from passive players.";
+
 function handPrompt(h) {
   return [
     "You are a poker coach reviewing one hand from a no-limit Texas Hold'em practice app. The player is \"Hero\".",
     BOT_RULES,
     "Judge Hero's decisions as you would against real opponents, and note where the opponent's labelled style should change Hero's play (for example, value-bet thinner against a calling station, fold more to a tight-passive player's raise).",
+    h.mode === "live" ? LIVE_RULES : "",
     "",
     historyText(h),
     "",
@@ -1665,6 +1918,7 @@ function sessionPrompt(hands) {
   return [
     "You are a poker coach reviewing a block of hands from a no-limit Texas Hold'em practice app. The player is \"Hero\".",
     BOT_RULES,
+    hands.some(function (x) { return x.mode === "live"; }) ? LIVE_RULES : "",
     "",
     hands.map(historyText).join("\n\n"),
     "",
@@ -1866,7 +2120,7 @@ function startSessionRecord() {
     startedAt: Date.now(),
     lastAt: Date.now(),
     mode: table.settings.mode,
-    depth: table.settings.mode === "cash" ? table.settings.cashDepth : null,
+    depth: table.settings.mode !== "tournament" ? table.settings.cashDepth : null,
     hands: 0, net: 0, vpip: 0, charted: 0, onChart: 0
   });
 }
@@ -1918,6 +2172,8 @@ function restoreTable() {
   table.hand = null;
   table.sessionHands = saved.recent.filter(function (h) { return h.sessionId === t.sessionId; });
   table.viewing = table.sessionHands[0] || null;
+  renderSetupHint();
+  renderUnitToggle();
 }
 
 function renderSaveStatus() {
@@ -2036,7 +2292,7 @@ function renderCurve(host, curve) {
 }
 
 function sessionGameLabel(sess) {
-  return sess.mode === "cash" ? "Cash " + sess.depth + "bb" : "Tournament";
+  return sess.mode === "live" ? "Live $1/2" : (sess.mode === "cash" ? "Cash " + sess.depth + "bb" : "Tournament");
 }
 
 let confirmingErase = false;
@@ -2178,7 +2434,50 @@ function renderAll() {
 
 // ===== WIRING =====
 
-$("set-mode").addEventListener("change", syncSettingsVisibility);
+function renderSetupHint() {
+  var hint = $("setup-hint");
+  var s = table.settings;
+  var next = readSettings();
+  var changed = !!s && table.players.length > 0 &&
+    (next.mode !== s.mode || next.tableSize !== s.tableSize ||
+     (next.mode !== "tournament" && next.cashDepth !== s.cashDepth) ||
+     (next.mode === "tournament" && next.levelLength !== s.levelLength));
+  hint.hidden = !changed;
+  var modeNames = { cash: "a regular cash game", live: "Live $1/2", tournament: "a tournament" };
+  hint.textContent = !changed ? "" : (next.mode !== s.mode
+    ? "Press New session to start playing " + modeNames[next.mode] + ". This table is still " + modeNames[s.mode] + "."
+    : "Press New session to use these settings.");
+  $("new-session").classList.toggle("nudge", changed);
+}
+
+$("set-mode").addEventListener("change", function () { syncSettingsVisibility(); renderSetupHint(); });
+["set-size", "set-depth", "set-level"].forEach(function (id) { $(id).addEventListener("change", renderSetupHint); });
+function renderUnitToggle() {
+  var tournament = !!table.settings && !isCash();
+  document.querySelectorAll("#unit-toggle button").forEach(function (b) {
+    var on = b.dataset.unit === displayUnit;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+    if (b.dataset.unit === "money") b.textContent = tournament ? "Chips" : "$";
+  });
+}
+
+document.querySelectorAll("#unit-toggle button").forEach(function (b) {
+  b.addEventListener("click", function () {
+    displayUnit = b.dataset.unit;
+    try { localStorage.setItem("pokerapp.unit", displayUnit); } catch (e) { /* remembered for this visit only */ }
+    renderUnitToggle();
+    renderAll();
+    renderPanel();
+    renderSession();
+  });
+});
+
+$("mini-range").addEventListener("click", function () {
+  rangeOpen = true;
+  renderControls();
+  $("range-view").scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
 $("new-session").addEventListener("click", function () {
   if (table.running) return;
   newSession();
@@ -2227,6 +2526,7 @@ Promise.all([loadProgress(), loadArchive()]).then(function () {
   table.loading = false;
   if (saved.table && saved.table.players && saved.table.players.length) restoreTable();
   renderSaveStatus();
+  renderUnitToggle();
   renderAll();
   renderPanel();
   renderProgress();

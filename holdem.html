@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Play full Texas Hold'em hands at a 9-handed practice table against bots with different playing styles, and get Claude's feedback on each hand." />
     <title>Hold'em Practice Table</title>
-    <link rel="stylesheet" href="holdem.css?v=14" />
+    <link rel="stylesheet" href="holdem.css?v=17" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
     <header class="topbar">
-      <h1>Practice Table <span class="version" title="If this doesn't say v14, reload the page">v14 · compact options</span></h1>
+      <h1>Practice Table <span class="version" title="If this doesn't say v17, reload the page">v17 · $ or bb</span></h1>
       <nav class="nav">
         <a href="charts.html">Range Charts</a>
         <a href="simulator.html">Pre-Flop Simulator</a>
@@ -25,6 +25,7 @@
             <label for="set-mode">Game</label>
             <select id="set-mode">
               <option value="cash">Cash</option>
+              <option value="live">Live $1/2</option>
               <option value="tournament">Tournament</option>
             </select>
           </div>
@@ -39,9 +40,10 @@
           <div class="field" id="field-depth">
             <label for="set-depth">Buy-in</label>
             <select id="set-depth">
-              <option value="100">100bb</option>
-              <option value="40">40bb</option>
-              <option value="15">15bb</option>
+              <option value="150">$300</option>
+              <option value="100" selected>$200</option>
+              <option value="40">$80</option>
+              <option value="15">$30</option>
             </select>
           </div>
           <div class="field" id="field-level">
@@ -59,10 +61,19 @@
               <option value="fast">Fast</option>
             </select>
           </div>
+          <div class="field">
+            <span class="field-label" id="unit-label">Show</span>
+            <div class="unit-toggle" id="unit-toggle" role="group" aria-labelledby="unit-label">
+              <button type="button" data-unit="bb" aria-pressed="true">bb</button>
+              <button type="button" data-unit="money" aria-pressed="false">$</button>
+            </div>
+          </div>
           <button type="button" id="new-session" class="btn ghost">New session</button>
+          <p class="setup-hint" id="setup-hint" hidden></p>
         </form>
 
         <div class="table-wrap">
+          <button type="button" class="mini-range" id="mini-range" hidden aria-label="Open the full range view"></button>
           <div class="felt" id="felt">
             <div class="center">
               <p class="pot" id="pot"></p>
@@ -124,9 +135,9 @@
       </aside>
     </main>
 
-    <script src="engine.js?v=14"></script>
-    <script src="bots.js?v=14"></script>
-    <script src="storage.js?v=14"></script>
-    <script src="holdem.js?v=14"></script>
+    <script src="engine.js?v=17"></script>
+    <script src="bots.js?v=17"></script>
+    <script src="storage.js?v=17"></script>
+    <script src="holdem.js?v=17"></script>
   </body>
 </html>
