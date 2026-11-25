@@ -306,10 +306,19 @@ function modeLabel(stage, mode) {
   return mode === "live" ? "Live $1/2" : GAME_STAGES[stage].label;
 }
 
-// Live card-room bots buy in for $200-$300
+// Live card-room bots buy in for $200-$300 (the room's max)
 function botBuyIn() {
   if (!isLive()) return startingStack();
   return randomInt(100, 150) * CASH_BLINDS.bb;
+}
+
+// Sitting down at a live game that's been running: about a third of the table has already
+// won, some of them $500 or more. Buy-ins and reloads are still capped at $300.
+function liveSeatStack() {
+  var roll = Math.random();
+  if (roll < 0.15) return randomInt(250, 450) * CASH_BLINDS.bb;
+  if (roll < 0.35) return randomInt(155, 245) * CASH_BLINDS.bb;
+  return botBuyIn();
 }
 
 function syncSettingsVisibility() {
@@ -398,7 +407,7 @@ function newSession() {
   table.players = [];
   var size = startingTableSize();
   for (var i = 0; i < size; i++) {
-    table.players.push(i === HERO_SEAT ? makePlayer("You", start, true) : makePlayer(nextBotName(), botBuyIn(), false));
+    table.players.push(i === HERO_SEAT ? makePlayer("You", start, true) : makePlayer(nextBotName(), isLive() ? liveSeatStack() : botBuyIn(), false));
   }
   table.button = randomInt(0, size - 1);
   $("session-review-out").replaceChildren();
