@@ -213,9 +213,12 @@
 
   // ===== STATE =====
   var SAVE_KEY = "pokerapp.dealer.v1";
-  var START_BANK = 1000;
-  var stats = { bank: START_BANK, hands: 0, net: 0, decisions: 0, correct: 0, byStreet: { preflop: [0, 0], flop: [0, 0], river: [0, 0] }, log: [], biggest: 0 };
-  var settings = { ante: 10, trips: false, coach: true };
+  var DEFAULT_BUY_IN = 300;
+  function freshStats(bank) {
+    return { bank: bank, hands: 0, net: 0, decisions: 0, correct: 0, rebuys: 0, byStreet: { preflop: [0, 0], flop: [0, 0], river: [0, 0] }, log: [], biggest: 0 };
+  }
+  var stats = freshStats(DEFAULT_BUY_IN);
+  var settings = { ante: 10, trips: false, coach: true, buyIn: DEFAULT_BUY_IN };
   var game = null;
 
   function load() {
@@ -223,8 +226,11 @@
       var raw = localStorage.getItem(SAVE_KEY);
       if (raw) {
         var s = JSON.parse(raw);
+        var hadBuyIn = !!(s.settings && s.settings.buyIn);
         if (s.stats) stats = Object.assign(stats, s.stats);
         if (s.settings) settings = Object.assign(settings, s.settings);
+        // Saves from before the buy-in setting started at $1,000; an untouched one starts over at the new default
+        if (!hadBuyIn && !stats.hands) stats.bank = settings.buyIn;
       }
     } catch (e) { /* starts fresh */ }
   }
@@ -263,7 +269,7 @@
   function startCost() { return settings.ante * (settings.trips ? 3 : 2); }
 
   function rebuy() {
-    stats.bank = START_BANK;
+    stats.bank = settings.buyIn;
     stats.rebuys = (stats.rebuys || 0) + 1;
     save();
     render();
@@ -466,7 +472,7 @@
       d.disabled = short;
       row.append(d);
       if (short) {
-        var rb = el("button", "btn", "Rebuy " + money(START_BANK));
+        var rb = el("button", "btn", "Rebuy " + money(settings.buyIn));
         rb.type = "button";
         rb.addEventListener("click", rebuy);
         row.append(rb);
@@ -555,6 +561,10 @@
     var busy = game && game.stage !== "done";
     $("set-ante").value = String(settings.ante);
     $("set-ante").disabled = !!busy;
+    $("set-buyin").value = String(settings.buyIn);
+    var reset = $("reset-stats");
+    if (reset.dataset.armed !== "1") reset.textContent = "New session (" + money(settings.buyIn) + " buy-in)";
+    reset.disabled = !!busy;
     document.querySelectorAll("#trips-toggle button").forEach(function (b) {
       var on = (b.dataset.v === "on") === settings.trips;
       b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false"); b.disabled = !!busy;
@@ -576,6 +586,12 @@
 
   // ===== WIRING =====
   $("set-ante").addEventListener("change", function () { settings.ante = parseInt($("set-ante").value, 10); save(); render(); });
+  // A new buy-in takes effect on your next rebuy or new session; before your first hand it applies right away
+  $("set-buyin").addEventListener("change", function () {
+    settings.buyIn = parseInt($("set-buyin").value, 10);
+    if (!stats.hands && (!game || game.stage === "done")) stats.bank = settings.buyIn;
+    save(); render();
+  });
   document.querySelectorAll("#trips-toggle button").forEach(function (b) {
     b.addEventListener("click", function () { settings.trips = b.dataset.v === "on"; save(); render(); });
   });
@@ -584,9 +600,11 @@
   });
   $("reset-stats").addEventListener("click", function () {
     var btn = $("reset-stats");
-    if (btn.dataset.armed !== "1") { btn.dataset.armed = "1"; btn.textContent = "Tap again to reset"; return; }
-    btn.dataset.armed = ""; btn.textContent = "Reset bankroll and stats";
-    stats = { bank: START_BANK, hands: 0, net: 0, decisions: 0, correct: 0, byStreet: { preflop: [0, 0], flop: [0, 0], river: [0, 0] }, log: [], biggest: 0 };
+    if (game && game.stage !== "done") return;
+    if (btn.dataset.armed !== "1") { btn.dataset.armed = "1"; btn.textContent = "Tap again: new session with " + money(settings.buyIn); return; }
+    btn.dataset.armed = "";
+    stats = freshStats(settings.buyIn);
+    game = null;
     save(); render();
   });
   document.addEventListener("keydown", function (e) {
