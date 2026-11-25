@@ -375,6 +375,7 @@ function newSession() {
   startSessionRecord();
   saveTable();
   renderProgress();
+  renderSetupHint();
   playHand();
 }
 
@@ -1231,30 +1232,69 @@ function rangeHandAt(r, c) {
   return r < c ? RANGE_RANKS[r] + RANGE_RANKS[c] + "s" : RANGE_RANKS[c] + RANGE_RANKS[r] + "o";
 }
 
-function renderRangeView() {
-  var box = $("range-view");
-  var ctx = pendingHero && pendingHero.ctx;
-  box.replaceChildren();
-  if (!rangeOpen || !ctx || ctx.street !== "preflop") { box.hidden = true; return; }
-  box.hidden = false;
+let rangeCache = { ctx: null, data: null };
 
+// The chart's action for every starting hand in the current decision, computed once per decision
+function rangeData(ctx) {
+  if (rangeCache.ctx === ctx) return rangeCache.data;
   var me = players()[HERO_SEAT];
-  var mine = handNotation(me.cards);
-  var myChart = heroChartFor(ctx);
+  var cells = [];
   var combos = {};
-  var grid = el("div", "range-grid");
   for (var r = 0; r < 13; r++) {
     for (var c = 0; c < 13; c++) {
       var hand = rangeHandAt(r, c);
       var chart = heroChartFor(ctx, hand);
       var action = chart ? chart.action : "Fold";
-      var style = RANGE_STYLE[action] || RANGE_STYLE.Fold;
       combos[action] = (combos[action] || 0) + (hand.length === 2 ? 6 : (hand[2] === "s" ? 4 : 12));
-      var cell = el("div", "range-cell " + style[0] + (hand === mine ? " mine" : "") + (r === c ? " pair" : ""), hand);
-      cell.title = hand + ": " + style[1];
-      grid.append(cell);
+      cells.push({ hand: hand, action: action, pair: r === c });
     }
   }
+  var data = { cells: cells, combos: combos, mine: handNotation(me.cards), myChart: heroChartFor(ctx) };
+  rangeCache = { ctx: ctx, data: data };
+  return data;
+}
+
+// Colors-only chart in the corner of the table, with the player's hand marked
+function renderMiniRange() {
+  var box = $("mini-range");
+  var ctx = pendingHero && pendingHero.ctx;
+  box.replaceChildren();
+  if (!ctx || ctx.street !== "preflop") { box.hidden = true; return; }
+  box.hidden = false;
+  var data = rangeData(ctx);
+  var myAction = data.myChart ? data.myChart.action : "Fold";
+  var myStyle = RANGE_STYLE[myAction] || RANGE_STYLE.Fold;
+  var label = el("span", "mini-label");
+  label.append(document.createTextNode("Chart "), el("strong", "mini-act " + myStyle[0], myStyle[1]));
+  var grid = el("span", "mini-grid");
+  data.cells.forEach(function (cell) {
+    var style = RANGE_STYLE[cell.action] || RANGE_STYLE.Fold;
+    grid.append(el("span", "mini-cell " + style[0] + (cell.hand === data.mine ? " mine" : "")));
+  });
+  box.append(label, grid);
+  box.title = data.mine + ": chart says " + myStyle[1].toLowerCase() + ". Tap for the full range view.";
+}
+
+function renderRangeView() {
+  var box = $("range-view");
+  var ctx = pendingHero && pendingHero.ctx;
+  renderMiniRange();
+  box.replaceChildren();
+  if (!rangeOpen || !ctx || ctx.street !== "preflop") { box.hidden = true; return; }
+  box.hidden = false;
+
+  var me = players()[HERO_SEAT];
+  var data = rangeData(ctx);
+  var mine = data.mine;
+  var myChart = data.myChart;
+  var combos = data.combos;
+  var grid = el("div", "range-grid");
+  data.cells.forEach(function (cell) {
+    var style = RANGE_STYLE[cell.action] || RANGE_STYLE.Fold;
+    var node = el("div", "range-cell " + style[0] + (cell.hand === mine ? " mine" : "") + (cell.pair ? " pair" : ""), cell.hand);
+    node.title = cell.hand + ": " + style[1];
+    grid.append(node);
+  });
 
   var effBB = Math.round(effectiveStack(HERO_SEAT) / table.hand.bb);
   var head = el("header", "range-head");
@@ -2103,6 +2143,7 @@ function restoreTable() {
   table.hand = null;
   table.sessionHands = saved.recent.filter(function (h) { return h.sessionId === t.sessionId; });
   table.viewing = table.sessionHands[0] || null;
+  renderSetupHint();
 }
 
 function renderSaveStatus() {
@@ -2363,7 +2404,29 @@ function renderAll() {
 
 // ===== WIRING =====
 
-$("set-mode").addEventListener("change", syncSettingsVisibility);
+function renderSetupHint() {
+  var hint = $("setup-hint");
+  var s = table.settings;
+  var next = readSettings();
+  var changed = !!s && table.players.length > 0 &&
+    (next.mode !== s.mode || next.tableSize !== s.tableSize ||
+     (next.mode !== "tournament" && next.cashDepth !== s.cashDepth) ||
+     (next.mode === "tournament" && next.levelLength !== s.levelLength));
+  hint.hidden = !changed;
+  var modeNames = { cash: "a regular cash game", live: "Live $1/2", tournament: "a tournament" };
+  hint.textContent = !changed ? "" : (next.mode !== s.mode
+    ? "Press New session to start playing " + modeNames[next.mode] + ". This table is still " + modeNames[s.mode] + "."
+    : "Press New session to use these settings.");
+  $("new-session").classList.toggle("nudge", changed);
+}
+
+$("set-mode").addEventListener("change", function () { syncSettingsVisibility(); renderSetupHint(); });
+["set-size", "set-depth", "set-level"].forEach(function (id) { $(id).addEventListener("change", renderSetupHint); });
+$("mini-range").addEventListener("click", function () {
+  rangeOpen = true;
+  renderControls();
+  $("range-view").scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
 $("new-session").addEventListener("click", function () {
   if (table.running) return;
   newSession();

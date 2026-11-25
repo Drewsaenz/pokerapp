@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Play full Texas Hold'em hands at a 9-handed practice table against bots with different playing styles, and get Claude's feedback on each hand." />
     <title>Hold'em Practice Table</title>
-    <link rel="stylesheet" href="holdem.css?v=15" />
+    <link rel="stylesheet" href="holdem.css?v=16" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
     <header class="topbar">
-      <h1>Practice Table <span class="version" title="If this doesn't say v15, reload the page">v15 · live $1/2</span></h1>
+      <h1>Practice Table <span class="version" title="If this doesn't say v16, reload the page">v16 · mini chart</span></h1>
       <nav class="nav">
         <a href="charts.html">Range Charts</a>
         <a href="simulator.html">Pre-Flop Simulator</a>
@@ -62,9 +62,11 @@
             </select>
           </div>
           <button type="button" id="new-session" class="btn ghost">New session</button>
+          <p class="setup-hint" id="setup-hint" hidden></p>
         </form>
 
         <div class="table-wrap">
+          <button type="button" class="mini-range" id="mini-range" hidden aria-label="Open the full range view"></button>
           <div class="felt" id="felt">
             <div class="center">
               <p class="pot" id="pot"></p>
@@ -126,9 +128,9 @@
       </aside>
     </main>
 
-    <script src="engine.js?v=15"></script>
-    <script src="bots.js?v=15"></script>
-    <script src="storage.js?v=15"></script>
-    <script src="holdem.js?v=15"></script>
+    <script src="engine.js?v=16"></script>
+    <script src="bots.js?v=16"></script>
+    <script src="storage.js?v=16"></script>
+    <script src="holdem.js?v=16"></script>
   </body>
 </html>
