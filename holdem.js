@@ -125,6 +125,16 @@ function actingOrder(street) {
   return (street === "preflop" ? PREFLOP_ORDER : POSTFLOP_ORDER).map(seatOfPos).filter(function (s) { return s >= 0; });
 }
 
+// "Your seat" practice setting: put the button wherever the hero lands in that position.
+// Seats this table size doesn't have (UTG at 6-handed) fall back to first to act.
+function fixedSeatButton(pos) {
+  var n = seatCount();
+  var order = positionsFor(n);
+  var idx = order.indexOf(pos);
+  if (idx < 0) idx = n > 3 ? 3 : 0;
+  return (HERO_SEAT - idx + n) % n;
+}
+
 function seatOfPos(pos) {
   var n = seatCount();
   var idx = positionsFor(n).indexOf(pos);
@@ -277,7 +287,8 @@ function readSettings() {
     cashDepth: parseInt($("set-depth").value, 10),
     levelLength: parseInt($("set-level").value, 10),
     tableSize: $("set-size").value,
-    speed: $("set-speed").value
+    speed: $("set-speed").value,
+    seat: $("set-seat").value
   };
 }
 
@@ -463,6 +474,8 @@ async function playHand() {
   table.running = true;
   pendingHero = null;
 
+  var lock = table.settings.seat;
+  if (lock && lock !== "rotate") table.button = fixedSeatButton(lock);
   var b = blinds();
   var deck = shuffledDeck();
   players().forEach(function (p, seat) {
@@ -2246,6 +2259,8 @@ function restoreTable() {
   table.sessionId = t.sessionId;
   table.usedNames = new Set(t.usedNames || []);
   if (!t.settings.tableSize) t.settings.tableSize = "9";
+  if (!t.settings.seat) t.settings.seat = "rotate";
+  $("set-seat").value = t.settings.seat;
   $("set-size").value = t.settings.tableSize;
   table.players = t.players.map(function (x) {
     var p = makePlayer(x.name, x.stack, x.isHero);
@@ -2569,6 +2584,13 @@ $("new-session").addEventListener("click", function () {
 $("set-speed").addEventListener("change", function () {
   if (table.settings) {
     table.settings.speed = $("set-speed").value;
+    if (!table.running) saveTable();
+  }
+});
+// Seat practice applies from the next hand, no new session needed
+$("set-seat").addEventListener("change", function () {
+  if (table.settings) {
+    table.settings.seat = $("set-seat").value;
     if (!table.running) saveTable();
   }
 });
