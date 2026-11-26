@@ -109,11 +109,22 @@
     var top = Math.max.apply(null, flop.map(function (c) { return c.rank; }));
     var d = draws(hole, flop);
     var pocket = hole[0].rank === hole[1].rank;
-    if (me[0] >= 2 && me[0] > board[0]) return "monster";
-    if (me[0] === 1 && board[0] === 0) {
-      var pr = me[1];
-      if ((pocket && pr > top) || pr === top) return d.flush || d.oesd ? "monster" : "toppair";
-      return d.flush || d.oesd ? "draw" : "pair";
+    var combo = d.flush || d.oesd;
+    // The pair the player made with their own cards, if any (on a paired board, "two pair"
+    // is really the board's pair plus one pair of yours, so it counts as one pair)
+    var myPair = -1;
+    if (board[0] === 0) {
+      if (me[0] >= 2) return "monster";
+      if (me[0] === 1) myPair = me[1];
+    } else if (board[0] === 1) {
+      if (me[0] >= 3) return "monster"; // trips with the board pair, full houses, straights, flushes
+      if (me[0] === 2) myPair = me[1] === board[1] ? me[2] : me[1];
+    } else {
+      if (me[0] >= 6) return "monster"; // trips on board: only a full house or better is strong
+    }
+    if (myPair >= 0) {
+      if ((pocket && myPair > top) || myPair === top) return combo ? "monster" : "toppair";
+      return combo ? "draw" : "pair";
     }
     if (d.flush && d.oesd) return "monster";
     if (d.flush || d.oesd) return "draw";
@@ -540,7 +551,7 @@
     var r = s.analysis;
     var label = { fold: "Fold", call: "Call", raise: "Raise", check: "Check", bethalf: "Bet half pot", betbig: "Bet pot" };
     var head = el("div", "result-head " + r.result);
-    head.append(el("span", "result-title", r.result === "right" ? "Right call" : (r.result === "close" ? "Close, but not best" : "Not this time")),
+    head.append(el("span", "result-title", r.result === "right" ? "Right play" : (r.result === "close" ? "Close, but not best" : "Not this time")),
       el("span", "result-sub", "Best: " + label[r.best]));
     box.append(head);
 
