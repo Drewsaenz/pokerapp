@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Multiway post-flop drill for live $1/2: you raised, the field called, and someone leads into you. Decide, then see your equity against everyone still in." />
+    <title>Multiway Drill</title>
+    <link rel="stylesheet" href="dealer.css?v=31" />
+    <link rel="stylesheet" href="multiway.css?v=31" />
+    <link rel="icon" type="image/png" href="casino.png" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Multiway Drill <span class="version">live $1/2</span></h1>
+      <nav class="nav">
+        <a href="holdem.html">Practice Table</a>
+        <a href="charts.html">Range Charts</a>
+        <a href="simulator.html">Pre-Flop Simulator</a>
+        <a href="dealer.html">Dealer Hold'em</a>
+      </nav>
+    </header>
+
+    <main class="layout">
+      <section class="play">
+        <form class="setup" onsubmit="return false">
+          <div class="field">
+            <label for="set-callers">Callers</label>
+            <select id="set-callers">
+              <option value="mixed">Mixed (2–7)</option>
+              <option value="small">2–3</option>
+              <option value="mid">4–5</option>
+              <option value="big">6–7</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="set-spot">Spot</label>
+            <select id="set-spot">
+              <option value="mixed">Mixed</option>
+              <option value="lead">Someone leads into you</option>
+              <option value="checked">Checked to you</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="set-hand">Your hand</label>
+            <select id="set-hand">
+              <option value="mixed">Mixed</option>
+              <option value="overpair">Overpair</option>
+              <option value="toppair">Top pair</option>
+            </select>
+          </div>
+        </form>
+
+        <div class="mw-table">
+          <p class="spot-line" id="spot-line"></p>
+          <div class="opponents" id="opponents"></div>
+          <div class="mw-board">
+            <div class="cards" id="board"></div>
+            <p class="table-rule" id="board-note"></p>
+          </div>
+          <div class="mw-hero">
+            <span class="area-label">You</span>
+            <div class="cards" id="hero-cards"></div>
+            <p class="hand-name you" id="hero-has"></p>
+          </div>
+        </div>
+
+        <div class="controls" id="controls" aria-live="polite"></div>
+      </section>
+
+      <aside class="side">
+        <section class="panel">
+          <h2>This spot</h2>
+          <div id="result"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Your drill</h2>
+          <dl class="stats" id="stats"></dl>
+          <p class="street-split" id="stats-split"></p>
+          <button type="button" class="btn ghost small" id="reset-drill">Reset stats</button>
+        </section>
+
+        <section class="panel">
+          <h2>Multiway rules of thumb</h2>
+          <dl class="strategy">
+            <div><dt>Your fair share shrinks</dt><dd>With 5 opponents you only "deserve" 1/6 of the pot. One pair, even JJ, is often behind the field once the money goes in.</dd></div>
+            <div><dt>Passive players' big bets are real</dt><dd>A full-pot lead from a Station or Nit is mostly two pair, sets or big draws. Fold one-pair hands more than feels right.</dd></div>
+            <div><dt>Count who's behind you</dt><dd>Players still to act can raise, so calling needs more than the pot odds say.</dd></div>
+            <div><dt>Bet big when you're best</dt><dd>Live players don't fold. When you're ahead on a wet board, charge every draw; with a medium hand, check.</dd></div>
+          </dl>
+        </section>
+      </aside>
+    </main>
+
+    <script src="engine.js?v=31"></script>
+    <script src="multiway.js?v=31"></script>
+  </body>
+</html>

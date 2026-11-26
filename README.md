@@ -65,6 +65,7 @@ A 9-handed table where you play full hands against eight bots, then get feedback
   - simulate a few hundred run-outs against those ranges to get their equity, without ever seeing your cards,
   - then value-bet, slow-play, c-bet, semi-bluff, bluff, raise, call or fold, at frequencies set by their style, sizing bets to the board.
 - **bb or $**: a switch in the options panel shows every amount in big blinds or in dollars ($1/$2 blinds, so 100bb is $200; chip counts in tournaments). Hand histories sent to Claude stay in big blinds. Buy-ins are listed in dollars ($200 default, up to $300).
+- **Avatars and player reads**: every bot has a cartoon avatar drawn from its name (never from its style). Set **Types** to Hidden and the TAG / LAG / Nit / Station labels come off the seats and out of the histories sent to Claude. Tap a player for a scouting card with what you've seen them do this session (how often they play and raise before the flop, bets vs calls after it, showdowns), then guess their type. A guess reveals the label for the rest of the session, and the Session panel keeps your score.
 - **Mini chart**: on every pre-flop decision, a colors-only chart in the table's corner shows the range for your spot with your hand enlarged and ringed in white, still in its chart color, and the chart's action above it. Tap it for the full range view.
 - **Chart on/off**: switch the chart off in the options bar to play unassisted: no mini chart, no range view, and the misclick guard stops quoting the chart (it still asks twice for 25bb+). Hands are still graded against the chart afterwards, and the Session panel compares your on-chart rate without the chart to with it. Turning the chart back on mid-hand counts that hand as assisted.
 - **Range view**: while deciding pre-flop, press R or tap Range view to see the full chart for your exact seat and situation (folded to you, limpers, facing a raise, a 3-bet, a 4-bet or an all-in), with your hand outlined and the chart's reasoning.
@@ -82,6 +83,12 @@ A 9-handed table where you play full hands against eight bots, then get feedback
 - **Claude feedback**: opened as a Claude artifact, the page can send a hand (or your last 10) to Claude and show a review in the page. Anywhere else, use "Copy hand history" and paste it into a chat.
 
 Hands are evaluated in `holdem.js` (best five of seven, side pots, split pots). `engine.js` holds the shared pre-flop ranges and `bots.js` the bots' hand reading and decisions.
+
+## Multiway Drill (`multiway.html`)
+
+The live $1/2 spot most training skips: you raised before the flop, two to seven players called, and the flop is out. Either someone leads into you (a third of the pot, half or full pot) and others call or fold before it's your turn, or it's checked to you. You choose fold / call / raise, or check / bet half / bet pot.
+
+Each opponent has a live style (mostly calling stations and loose players). Their hands are drawn from what fits their pre-flop call and their action on this flop: a full-pot lead from a Station is mostly two pair or better, sets and big draws; a LAG's lead is much wider. The grade compares your equity against everyone still in (Monte Carlo, with players behind you counted only when they'd call) to the price, discounted when players behind can still raise. The breakdown shows your equity, your fair share of the pot, the equity needed, your equity against the leader alone, and what the leader's bet represents. Then the turn, river and everyone's cards show one way it could have finished. Filters: number of callers, spot type, and your hand (overpair or top pair).
 
 ## Dealer Hold'em (`dealer.html`)
 
@@ -101,13 +108,14 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 
 ## Updating the hosted site
 
-GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=27`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
+GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=29`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
 
 ## Files
 
 ```
 index.html / app.js / style.css          Action Generator
 dealer.html / dealer.js / dealer.css      Dealer Hold'em
+multiway.html / multiway.js / multiway.css   Multiway Drill (uses dealer.css too)
 charts.html / charts.js / charts.css      Range Charts
 simulator.html / simulator.js / simulator.css   Simulator
 holdem.html / holdem.js / holdem.css      Practice Table

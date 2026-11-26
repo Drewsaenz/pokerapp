@@ -394,6 +394,9 @@ function newSession() {
   table.replaying = null;
   table.replaySaved = null;
   table.justUndid = false;
+  table.reads = {};
+  table.readScore = { guesses: 0, correct: 0 };
+  closeReadCard();
   table.settings = readSettings();
   table.level = 0;
   table.handsAtLevel = 0;
@@ -691,6 +694,160 @@ function undoLastHand() {
   renderProgress();
 }
 
+// ===== READS & AVATARS =====
+// Every bot gets a cartoon avatar drawn from its name (never from its style), and the player can hide
+// the style labels and guess each bot's type from what it does at the table.
+var typesHidden = false;
+try { typesHidden = localStorage.getItem("pokerapp.types") === "hidden"; } catch (e) { /* default shown */ }
+if (!table.reads) table.reads = {};
+if (!table.readScore) table.readScore = { guesses: 0, correct: 0 };
+
+function hashStr(s) {
+  var x = 2166136261;
+  for (var i = 0; i < s.length; i++) { x ^= s.charCodeAt(i); x = Math.imul(x, 16777619); }
+  return x >>> 0;
+}
+
+function avatarSVG(name) {
+  function pickFor(key, list) { return list[hashStr(name + "|" + key) % list.length]; }
+  var bg = pickFor("bg", ["#3f7fc4", "#8a62c9", "#c2703d", "#3fae5f", "#b94848", "#2f8f8a", "#a3833a", "#5d6f82"]);
+  var skin = pickFor("skin", ["#f3d2b3", "#e8b98f", "#d4a073", "#b7804f", "#8d5a36", "#603b24"]);
+  var hair = pickFor("hair", ["#1f1a17", "#3b2a1e", "#6e4424", "#b5823f", "#bdb5aa", "#7a2e1e"]);
+  var shirt = pickFor("shirt", ["#e9e4d8", "#2b2f36", "#d9862b", "#4b6fa8", "#7f3f6b", "#3b7d4a", "#c94f4f"]);
+  var hat = pickFor("hat", ["#c94f4f", "#2b2f36", "#3f7fc4", "#e3b341", "#3b7d4a"]);
+  var style = pickFor("style", ["short", "long", "bald", "bun", "curly", "spiky", "short", "long"]);
+  var extra = pickFor("extra", ["none", "none", "glasses", "shades", "cap", "beanie", "headphones", "beard", "glasses", "cap"]);
+  var s = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="20" fill="' + bg + '"/>';
+  s += '<path d="M5 40 C7 30.5 33 30.5 35 40 Z" fill="' + shirt + '"/>';
+  s += '<rect x="17" y="25" width="6" height="6" fill="' + skin + '"/>';
+  if (style === "long") s += '<path d="M10.5 18 C9.5 6.5 30.5 6.5 29.5 18 L30 28 L25.5 28 L26 17 L14 17 L14.5 28 L10 28 Z" fill="' + hair + '"/>';
+  s += '<ellipse cx="20" cy="19" rx="8.5" ry="9.5" fill="' + skin + '"/>';
+  if (style === "short" || style === "bun") s += '<path d="M11.4 17.5 C10.6 8.5 29.4 8.5 28.6 17.5 C26 13 14 13 11.4 17.5 Z" fill="' + hair + '"/>';
+  if (style === "bun") s += '<circle cx="20" cy="8" r="3.6" fill="' + hair + '"/>';
+  if (style === "long") s += '<path d="M11.4 17 C10.6 8 29.4 8 28.6 17 C25 12.5 15 12.5 11.4 17 Z" fill="' + hair + '"/>';
+  if (style === "curly") [12.5, 16, 20, 24, 27.5].forEach(function (cx, i) { s += '<circle cx="' + cx + '" cy="' + (i % 2 ? 10.5 : 12.5) + '" r="3.8" fill="' + hair + '"/>'; });
+  if (style === "spiky") s += '<polygon points="11.4,16.5 12.5,8 15.5,12 17.5,5.5 20.5,10.5 23.5,5.5 25.5,10.5 28.5,8.5 28.6,16.5" fill="' + hair + '"/>';
+  if (style === "bald") s += '<path d="M11.6 19 C11.4 16.5 12 15.5 12.6 15 L12.8 19 Z M28.4 19 C28.6 16.5 28 15.5 27.4 15 L27.2 19 Z" fill="' + hair + '"/>';
+  if (extra === "beard") s += '<path d="M11.8 20 C12 27.5 16 29.6 20 29.6 C24 29.6 28 27.5 28.2 20 C26.5 24.5 23.5 25.8 20 25.8 C16.5 25.8 13.5 24.5 11.8 20 Z" fill="' + hair + '"/>';
+  s += '<circle cx="16.6" cy="19.6" r="1.15" fill="#1b1b1b"/><circle cx="23.4" cy="19.6" r="1.15" fill="#1b1b1b"/>';
+  s += '<path d="M17 23.8 Q20 26.2 23 23.8" stroke="#5b2f22" stroke-width="1.2" fill="none" stroke-linecap="round"/>';
+  if (extra === "glasses") s += '<g stroke="#1b1b1b" stroke-width="1" fill="none"><circle cx="16.6" cy="19.6" r="2.7"/><circle cx="23.4" cy="19.6" r="2.7"/><path d="M19.3 19.4 H20.7"/></g>';
+  if (extra === "shades") s += '<g fill="#111"><rect x="13.2" y="17.6" width="6" height="4" rx="1.6"/><rect x="20.8" y="17.6" width="6" height="4" rx="1.6"/><rect x="19" y="18.4" width="2" height="1"/></g>';
+  if (extra === "cap") s += '<path d="M11 15.5 C11 6.8 29 6.8 29 15.5 Z" fill="' + hat + '"/><path d="M19 14.2 H31 a1.3 1.3 0 0 1 0 2.6 H19 Z" fill="' + hat + '"/>';
+  if (extra === "beanie") s += '<path d="M11.2 15.5 C11 5.5 29 5.5 28.8 15.5 Z" fill="' + hat + '"/><rect x="10.8" y="13.4" width="18.4" height="3.4" rx="1.4" fill="' + hat + '" opacity="0.85"/><circle cx="20" cy="5.6" r="2.4" fill="' + hat + '"/>';
+  if (extra === "headphones") s += '<path d="M10.5 19 C10.5 6.5 29.5 6.5 29.5 19" stroke="#1b1b1b" stroke-width="1.8" fill="none"/><rect x="8.6" y="16.5" width="3.6" height="6.5" rx="1.6" fill="#1b1b1b"/><rect x="27.8" y="16.5" width="3.6" height="6.5" rx="1.6" fill="#1b1b1b"/>';
+  return s + "</svg>";
+}
+
+function avatarEl(name, cls) {
+  var n = el("span", "avatar " + (cls || ""));
+  n.innerHTML = avatarSVG(name);
+  return n;
+}
+
+function readOf(name) {
+  if (!table.reads[name]) table.reads[name] = { hands: 0, vpip: 0, pfr: 0, bets: 0, calls: 0, showdowns: 0, guess: null };
+  return table.reads[name];
+}
+
+// Is this bot's style label visible right now?
+function styleShown(p) {
+  if (!p || !p.style) return false;
+  if (!typesHidden) return true;
+  var r = table.reads[p.name];
+  return !!(r && r.guess);
+}
+
+// After each real hand, note what every bot did, the way you'd keep track at a live table
+function observeHand(h) {
+  h.seats.forEach(function (s, seat) {
+    if (s.isHero) return;
+    var r = readOf(s.name);
+    r.hands += 1;
+    var acts = h.actions.filter(function (a) { return a.seat === seat && a.type !== "post"; });
+    var pre = acts.filter(function (a) { return a.street === "preflop"; });
+    if (pre.some(function (a) { return a.type === "call" || a.type === "raise"; })) r.vpip += 1;
+    if (pre.some(function (a) { return a.type === "raise"; })) r.pfr += 1;
+    acts.forEach(function (a) {
+      if (a.street === "preflop") return;
+      if (a.type === "bet" || a.type === "raise") r.bets += 1;
+      if (a.type === "call") r.calls += 1;
+    });
+    if (h.showdown.some(function (x) { return x.seat === seat; })) r.showdowns += 1;
+  });
+}
+
+var GUESS_HELP = {
+  TAG: "Plays few hands, and bets and raises them",
+  LAG: "Plays lots of hands, and bets and raises a lot",
+  NIT: "Plays very few hands, and rarely raises",
+  CALL: "Plays lots of hands, calls a lot, rarely raises"
+};
+
+function closeReadCard() {
+  var box = $("read-card");
+  if (box) box.hidden = true;
+}
+
+function openReadCard(name) {
+  var p = players().find(function (x) { return x.name === name; });
+  if (!p || p.isHero) return;
+  var r = readOf(name);
+  var box = $("read-card");
+  var card = $("read-card-body");
+  card.replaceChildren();
+  var head = el("div", "read-head");
+  var who = el("div", "read-who");
+  who.append(el("strong", null, p.name), el("span", null, p.pos + " · " + fmtBB(p.stack, blinds().bb)));
+  head.append(avatarEl(p.name, "lg"), who);
+  var close = el("button", "read-close", "×");
+  close.type = "button";
+  close.setAttribute("aria-label", "Close");
+  close.addEventListener("click", closeReadCard);
+  head.append(close);
+  card.append(head);
+
+  function pctOf(n) { return r.hands ? Math.round(n / r.hands * 100) + "%" : "–"; }
+  var dl = el("dl", "read-stats");
+  [["Plays (VPIP)", pctOf(r.vpip)], ["Raises pre-flop (PFR)", pctOf(r.pfr)], ["Hands seen", String(r.hands)], ["Showdowns", String(r.showdowns)],
+   ["After the flop", r.bets + " bets or raises · " + r.calls + " calls"]].forEach(function (t) {
+    var d = el("div"); d.append(el("dt", null, t[0]), el("dd", null, t[1])); dl.append(d);
+  });
+  card.append(dl);
+  if (r.hands < 15) card.append(el("p", "read-note", r.hands ? "Only " + r.hands + " hand" + (r.hands === 1 ? "" : "s") + " so far. Reads get reliable after 20 or more." : "No hands with this player yet. Watch a few first."));
+
+  if (!typesHidden && !r.guess) {
+    card.append(el("p", "read-answer", p.name + " plays " + styleOf(p).name + " (" + styleOf(p).label + ")."));
+    card.append(el("p", "read-note", "Player types are shown. Set Types to Hidden in the options to practice reading players."));
+  } else if (r.guess) {
+    var right = r.guess === p.style;
+    card.append(el("p", "read-answer " + (right ? "right" : "wrong"), (right ? "You read it right: " : "You guessed " + BOT_STYLES[r.guess].label + ". ") +
+      p.name + " plays " + styleOf(p).name + " (" + styleOf(p).label + ")."));
+  } else {
+    card.append(el("p", "read-q", "What kind of player is " + p.name + "?"));
+    var grid = el("div", "read-guesses");
+    ["TAG", "LAG", "NIT", "CALL"].forEach(function (k) {
+      var b = el("button", "read-guess");
+      b.type = "button";
+      b.append(el("strong", null, BOT_STYLES[k].label), el("span", null, GUESS_HELP[k]));
+      b.addEventListener("click", function () {
+        r.guess = k;
+        table.readScore.guesses += 1;
+        if (k === p.style) table.readScore.correct += 1;
+        saveTable();
+        renderAll();
+        renderSession();
+        openReadCard(name);
+      });
+      grid.append(b);
+    });
+    card.append(grid);
+    card.append(el("p", "read-note", "Guessing reveals their type for the rest of the session, right or wrong."));
+  }
+  box.hidden = false;
+  close.focus();
+}
+
 // ===== PLAY IT AGAIN =====
 // Deals a finished hand again from the same seat, stacks and seed: same cards, same board,
 // and the bots repeat their choices until you do something different. Replays are practice:
@@ -917,6 +1074,7 @@ function settle() {
   table.acting = null;
   if (h.practice) return;
   table.sessionHands.unshift(h);
+  observeHand(h);
 
   if (table.settings.mode === "tournament" && hero.stack === 0) {
     table.over = true;
@@ -1462,8 +1620,21 @@ function renderTable() {
     }
     var plate = el("div", "seat-plate");
     var top = el("div", "seat-top");
-    top.append(el("span", "seat-name", p.name), el("span", "seat-pos", p.pos + (p.style ? " · " + styleOf(p).label : "")));
-    if (p.style) node.title = p.name + " plays " + styleOf(p).name;
+    var shown = styleShown(p);
+    var nameRow = el("span", "seat-namerow");
+    if (!p.isHero) nameRow.append(avatarEl(p.name));
+    nameRow.append(el("span", "seat-name", p.name));
+    top.append(nameRow, el("span", "seat-pos", p.pos + (shown ? " · " + styleOf(p).label : "")));
+    if (!p.isHero) {
+      var rd = table.reads[p.name];
+      if (rd && rd.guess) plate.classList.add(rd.guess === p.style ? "read-right" : "read-wrong");
+      plate.classList.add("scout");
+      plate.setAttribute("role", "button");
+      plate.tabIndex = 0;
+      plate.title = shown ? p.name + " plays " + styleOf(p).name + ". Tap for their stats." : "Tap to see what " + p.name + " has done and guess their type";
+      plate.addEventListener("click", function () { openReadCard(p.name); });
+      plate.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); openReadCard(p.name); } });
+    }
     var stack = el("div", "seat-stack", p.allIn && !done ? "All-in" : fmtBB(p.stack, bb));
     stack.title = fmtChips(p.stack);
     plate.append(top, stack);
@@ -2232,7 +2403,8 @@ function historyLines(h) {
     return h.seats.some(function (x) { return x.pos === pos; });
   }).map(function (pos) {
     var s = h.seats.find(function (x) { return x.pos === pos; });
-    return pos + (s.isHero ? " (Hero)" : " (" + BOT_STYLES[s.style].name + ")") + " " + fmtBB(s.stack, bb);
+    var known = !typesHidden || (table.reads[s.name] && table.reads[s.name].guess);
+    return pos + (s.isHero ? " (Hero)" : " (" + (known ? BOT_STYLES[s.style].name : "player type unknown to Hero") + ")") + " " + fmtBB(s.stack, bb);
   });
   lines.push("Stacks: " + stacks.join(", ") + ".");
 
@@ -2335,6 +2507,7 @@ function handPrompt(h) {
   return [
     "You are a poker coach reviewing one hand from a no-limit Texas Hold'em practice app. The player is \"Hero\".",
     BOT_RULES,
+    typesHidden ? "Hero is practicing reading players, so styles Hero hasn't identified are shown as unknown. Judge those players only by what their actions show, and don't name their style." : "",
     "Judge Hero's decisions as you would against real opponents, and note where the opponent's labelled style should change Hero's play (for example, value-bet thinner against a calling station, fold more to a tight-passive player's raise).",
     "Use only the cards shown. Each street's \"Hero has\" note states Hero's made hand and draws; do not credit Hero with draws or hands it doesn't list.",
     "Each street lists the stacks behind. When a bet is marked as all of an opponent's remaining stack, its size was the most that could be called, so judge whether betting was right, not how big it was.",
@@ -2357,6 +2530,7 @@ function sessionPrompt(hands) {
   return [
     "You are a poker coach reviewing a block of hands from a no-limit Texas Hold'em practice app. The player is \"Hero\".",
     BOT_RULES,
+    typesHidden ? "Hero is practicing reading players, so styles Hero hasn't identified are shown as unknown. Judge those players only by what their actions show, and don't name their style." : "",
     hands.some(function (x) { return x.mode === "live"; }) ? LIVE_RULES : "",
     "Use only the cards shown. Each street's \"Hero has\" note states Hero's made hand and draws; do not credit Hero with draws or hands it doesn't list.",
     "Each street lists the stacks behind. When a bet is marked as all of an opponent's remaining stack, its size was the most that could be called, so judge whether betting was right, not how big it was.",
@@ -2551,7 +2725,9 @@ function tableSnapshot() {
     over: r.over,
     sessionId: table.sessionId,
     justUndid: !!table.justUndid,
-    usedNames: Array.from(table.usedNames)
+    usedNames: Array.from(table.usedNames),
+    reads: table.reads,
+    readScore: table.readScore
   };
 }
 
@@ -2609,6 +2785,8 @@ function restoreTable() {
   table.sessionId = t.sessionId;
   table.justUndid = !!t.justUndid;
   table.usedNames = new Set(t.usedNames || []);
+  table.reads = t.reads || {};
+  table.readScore = t.readScore || { guesses: 0, correct: 0 };
   if (!t.settings.tableSize) t.settings.tableSize = "9";
   if (!t.settings.seat) t.settings.seat = "rotate";
   $("set-seat").value = t.settings.seat;
@@ -2852,6 +3030,12 @@ function renderSession() {
   split.textContent = solo.length ? "On chart without the chart: " + pct(solo) + " (" + solo.length + " hand" + (solo.length === 1 ? "" : "s") + ")" +
     (helped.length ? " · with it: " + pct(helped) + " (" + helped.length + ")" : "") : "";
 
+  var readLine = $("read-score");
+  if (!readLine) { readLine = el("p", "chart-split"); readLine.id = "read-score"; split.after(readLine); }
+  var rs = table.readScore || { guesses: 0, correct: 0 };
+  readLine.hidden = !rs.guesses;
+  readLine.textContent = rs.guesses ? "Player reads: " + rs.correct + " of " + rs.guesses + " right" : "";
+
   var sessionBtn = $("review-session");
   sessionBtn.hidden = sampleState !== "ready";
   sessionBtn.disabled = hands.length < 3 || !!activeReview;
@@ -2921,6 +3105,24 @@ function renderUnitToggle() {
   });
 }
 
+function renderTypesToggle() {
+  document.querySelectorAll("#types-toggle button").forEach(function (b) {
+    var on = (b.dataset.types === "hidden") === typesHidden;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+renderTypesToggle();
+document.querySelectorAll("#types-toggle button").forEach(function (b) {
+  b.addEventListener("click", function () {
+    typesHidden = b.dataset.types === "hidden";
+    try { localStorage.setItem("pokerapp.types", typesHidden ? "hidden" : "shown"); } catch (e) { /* this visit only */ }
+    renderTypesToggle();
+    renderAll();
+  });
+});
+document.addEventListener("click", function (e) { if (e.target && e.target.id === "read-card") closeReadCard(); });
+
 function renderHintToggle() {
   document.querySelectorAll("#hint-toggle button").forEach(function (b) {
     var on = (b.dataset.hints === "on") === hintsOn;
@@ -2982,6 +3184,11 @@ $("review-session").addEventListener("click", function () {
 });
 
 document.addEventListener("keydown", function (e) {
+  var rc = $("read-card");
+  if (rc && !rc.hidden) {
+    if (e.key === "Escape") { e.preventDefault(); closeReadCard(); }
+    return;
+  }
   if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (pendingHero) {

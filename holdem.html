@@ -5,17 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Play full Texas Hold'em hands at a 9-handed practice table against bots with different playing styles, and get Claude's feedback on each hand." />
     <title>Hold'em Practice Table</title>
-    <link rel="stylesheet" href="holdem.css?v=27" />
+    <link rel="stylesheet" href="holdem.css?v=29" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
     <header class="topbar">
-      <h1>Practice Table <span class="version" title="If this doesn't say v27, reload the page">v27 · all-in aware reviews</span></h1>
+      <h1>Practice Table <span class="version" title="If this doesn't say v29, reload the page">v29 · multiway drill</span></h1>
       <nav class="nav">
         <a href="charts.html">Range Charts</a>
         <a href="simulator.html">Pre-Flop Simulator</a>
         <a href="index.html">Action Generator</a>
         <a href="dealer.html">Dealer Hold'em</a>
+        <a href="multiway.html">Multiway Drill</a>
       </nav>
     </header>
 
@@ -91,6 +92,13 @@
               <button type="button" data-hints="off" aria-pressed="false">Off</button>
             </div>
           </div>
+          <div class="field">
+            <span class="field-label" id="types-label">Types</span>
+            <div class="unit-toggle" id="types-toggle" role="group" aria-labelledby="types-label" title="Hidden: bots don't wear TAG / LAG / Nit / Station labels. Tap a player to see their stats and guess.">
+              <button type="button" data-types="shown" aria-pressed="true">Shown</button>
+              <button type="button" data-types="hidden" aria-pressed="false">Hidden</button>
+            </div>
+          </div>
           <button type="button" id="new-session" class="btn ghost">New session</button>
           <p class="setup-hint" id="setup-hint" hidden></p>
         </form>
@@ -159,9 +167,12 @@
       </aside>
     </main>
 
-    <script src="engine.js?v=27"></script>
-    <script src="bots.js?v=27"></script>
-    <script src="storage.js?v=27"></script>
-    <script src="holdem.js?v=27"></script>
+    <script src="engine.js?v=29"></script>
+    <script src="bots.js?v=29"></script>
+    <script src="storage.js?v=29"></script>
+    <script src="holdem.js?v=29"></script>
+    <div class="read-card" id="read-card" hidden>
+      <div class="read-card-body" id="read-card-body" role="dialog" aria-modal="true" aria-label="Player read"></div>
+    </div>
   </body>
 </html>
