@@ -6,7 +6,7 @@ const STACK_BB = { deep: 100, mid: 30, short: 12 };
 
 const ACTION_STYLE = {
   "Raise": { cls: "a-raise", label: "Raise" },
-  "3-Bet": { cls: "a-3bet", label: "3-bet" },
+  "3-Bet": { cls: "a-3bet", label: "Re-raise (3-bet)" },
   "All-In": { cls: "a-allin", label: "All-in" },
   "Call": { cls: "a-call", label: "Call" },
   "Fold": { cls: "a-fold", label: "Fold" }
@@ -144,7 +144,7 @@ function threeBetSizeText(hero, opener) {
   var mult = ip ? 3.25 : 4;
   var to = halfStep(openSizeBB(opener) * mult);
   var live = Math.round(15 * mult / 5) * 5;
-  return "3-bet to " + to + "bb ($" + (to * 2) + ") · live $" + live + " vs a $15 open · " + (ip ? "in position" : "out of position");
+  return "Re-raise to " + to + "bb ($" + (to * 2) + ") · live $" + live + " vs a $15 raise · " + (ip ? "in position" : "out of position");
 }
 
 // ===== OPENING RANGES AT A GLANCE =====
@@ -185,14 +185,14 @@ function renderThreeBetGlance() {
     var fig = el("figure", "mini");
     var cap = el("figcaption");
     cap.append(el("span", "pos-chip g-" + POSITION_INFO[pos].group.toLowerCase(), pos),
-      el("span", "mini-pct", "3-bet " + pctOfCombos(chart.combos["3-Bet"] || 0) + " · call " + pctOfCombos(chart.combos.Call || 0)));
+      el("span", "mini-pct", "Call " + pctOfCombos(chart.combos.Call || 0) + " · re-raise " + pctOfCombos(chart.combos["3-Bet"] || 0)));
     var gridHost = el("div");
     renderGrid(gridHost, chart, true);
     fig.append(cap, el("p", "size-line", threeBetSizeText(pos, tbRaiser)), gridHost);
     host.append(fig);
   });
-  $("tb-note").textContent = "The " + tbRaiser + " opens to " + openSizeBB(tbRaiser) + "bb ($" + (openSizeBB(tbRaiser) * 2) + "), or about $15 live. " +
-    "Every seat after them, at 100bb. Add one more raise-size to your 3-bet for each player who already called.";
+  $("tb-note").textContent = "The " + tbRaiser + " raises to " + openSizeBB(tbRaiser) + "bb ($" + (openSizeBB(tbRaiser) * 2) + "), or about $15 live, and it's your turn. " +
+    "Find your seat below (100bb stacks). If other players already called, re-raise one raise-size bigger for each of them.";
 }
 
 // ===== RANGE EXPLORER =====
