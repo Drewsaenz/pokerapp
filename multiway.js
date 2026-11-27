@@ -284,16 +284,24 @@
     var type = settings.spot === "mixed" ? (Math.random() < 0.6 ? "lead" : "checked") : settings.spot;
     if (!before.length) type = "checked";
 
+    // Stacks behind after the $15 pre-flop: mostly $200-300 buy-ins, some players already up
+    function liveStack() {
+      var r = Math.random();
+      var start = r < 0.65 ? 150 + Math.floor(Math.random() * 151) : (r < 0.85 ? 300 + Math.floor(Math.random() * 201) : 500 + Math.floor(Math.random() * 401));
+      return start - openTo;
+    }
+    var heroStack = (Math.random() < 0.7 ? 200 + Math.floor(Math.random() * 101) : 300 + Math.floor(Math.random() * 301)) - openTo;
     var villains = order.filter(function (p) { return p !== heroPos; }).map(function (pos, i) {
-      return { pos: pos, name: names[i], style: pickOf(STYLE_POOL), act: before.indexOf(pos) !== -1 ? "check" : "behind" };
+      return { pos: pos, name: names[i], style: pickOf(STYLE_POOL), act: before.indexOf(pos) !== -1 ? "check" : "behind", stack: liveStack() };
     });
     var bet = 0;
     if (type === "lead") {
       var leader = villains[Math.floor(Math.random() * before.length)];
       leader.act = "lead";
       leader.size = pickOf(["small", "half", "pot", "pot"]);
-      bet = Math.round(pot * { small: 0.33, half: 0.55, pot: 1 }[leader.size]);
+      bet = Math.min(Math.round(pot * { small: 0.33, half: 0.55, pot: 1 }[leader.size]), leader.stack);
       leader.amount = bet;
+      leader.allIn = bet === leader.stack;
       // Players between the leader and Hero call or fold, decided from a hand that fits what they did
       var seenLeader = false;
       villains.forEach(function (v) {
@@ -309,7 +317,7 @@
         var h = sampleHand({ style: v.style, act: "behind" }, dk, flop);
         var cont = Math.random() < CONTINUE[v.style][ci(classify(h, flop))];
         v.act = cont ? "call" : "fold";
-        if (cont) v.amount = bet;
+        if (cont) { v.amount = Math.min(bet, v.stack); v.allIn = v.amount === v.stack; }
         // Redraw so the hand matches the action we're showing
         h = cont ? sampleHand(v, dk, flop) : h;
         v.hole = h;
@@ -318,8 +326,8 @@
       }
       dk = without(dk, v.hole);
     });
-    var potNow = pot + villains.reduce(function (s, v) { return s + (v.act === "lead" || v.act === "call" ? bet : 0); }, 0);
-    spot = { hole: hole, flop: flop, heroPos: heroPos, villains: villains, type: type, pot: pot, potNow: potNow, bet: bet, openTo: openTo,
+    var potNow = pot + villains.reduce(function (s, v) { return s + (v.act === "lead" || v.act === "call" ? v.amount : 0); }, 0);
+    spot = { hole: hole, flop: flop, heroPos: heroPos, villains: villains, type: type, pot: pot, potNow: potNow, bet: bet, openTo: openTo, heroStack: heroStack,
       runout: shuffle(dk.slice()).slice(0, 2), choice: null, analysis: null };
     render();
   }
@@ -388,10 +396,14 @@
     var behind = s.villains.filter(function (v) { return v.act === "behind"; }).length;
     var res = { a: a, fair: fair, players: players };
     if (facing) {
-      var toCall = s.bet;
+      var toCall = Math.min(s.bet, s.heroStack);
       var needed = toCall / (s.potNow + toCall);
-      // Equity you actually realize multiway: players behind can raise, and you'll face more bets
-      var realize = behind ? 0.8 : 0.9;
+      // Equity you actually realize multiway: players behind can raise, and you'll face more bets.
+      // All in (you or every opponent who matters), nobody can push you off it.
+      var leaderV = s.villains.find(function (v) { return v.act === "lead"; });
+      var allInCall = toCall >= s.heroStack || (leaderV && leaderV.allIn && !behind && s.villains.every(function (v) { return v.act !== "call" || v.allIn; }));
+      var realize = allInCall ? 1 : (behind ? 0.8 : 0.9);
+      res.allInCall = allInCall;
       var best, ok = [];
       if (a.eq >= 0.55) { best = "raise"; ok = ["call"]; }
       else if (a.eq * realize >= needed) { best = "call"; if (a.eq >= 0.45) ok = ["raise"]; }
@@ -447,8 +459,8 @@
 
   function actText(v) {
     var s = spot;
-    if (v.act === "lead") return "Leads " + money(v.amount) + " (" + { small: "a third of the pot", half: "half the pot", pot: "full pot" }[v.size] + ")";
-    if (v.act === "call") return "Calls " + money(v.amount);
+    if (v.act === "lead") return "Leads " + money(v.amount) + (v.allIn ? " (all-in)" : " (" + { small: "a third of the pot", half: "half the pot", pot: "full pot" }[v.size] + ")");
+    if (v.act === "call") return "Calls " + money(v.amount) + (v.allIn ? " (all-in)" : "");
     if (v.act === "fold") return "Folds";
     if (v.act === "check") return "Checks";
     return s.type === "lead" ? "Still to act" : "Acts after you";
@@ -460,8 +472,12 @@
     if (!spot) return;
     var s = spot;
     var done = !!s.choice;
+    var lead = s.villains.find(function (v) { return v.act === "lead"; });
+    var eff = lead ? Math.min(s.heroStack, lead.stack) : Math.min(s.heroStack, Math.max.apply(null, s.villains.map(function (v) { return v.stack; })));
+    var spr = eff / s.pot;
     $("spot-line").textContent = "Live $1/2 · You raised to " + money(s.openTo) + " from the " + s.heroPos + " and " + s.villains.length +
-      (s.villains.length === 1 ? " player" : " players") + " called · Pot " + money(s.potNow);
+      (s.villains.length === 1 ? " player" : " players") + " called · Pot " + money(s.potNow) +
+      " · Effective stack " + money(eff) + (lead ? " vs " + lead.name : "") + " · SPR " + (Math.round(spr * 10) / 10);
 
     var row = $("opponents");
     row.replaceChildren();
@@ -470,6 +486,8 @@
       var head = el("div", "opp-head");
       head.append(el("strong", null, v.name), el("span", "opp-pos", v.pos));
       plate.append(head);
+      var left = v.stack - (v.act === "lead" || v.act === "call" ? v.amount : 0);
+      plate.append(el("span", "opp-stack", left > 0 ? money(left) + " behind" : "All-in"));
       plate.append(el("span", "opp-style " + v.style.toLowerCase(), STYLES[v.style].label));
       var cards = el("div", "opp-cards");
       if (done && settings.reveal && v.hole) v.hole.forEach(function (c) { cards.append(cardEl(c, "sm")); });
@@ -489,6 +507,7 @@
     var mine = $("hero-cards");
     mine.replaceChildren();
     s.hole.forEach(function (c) { mine.append(cardEl(c, "xl")); });
+    $("hero-stack").textContent = "Your stack " + money(s.heroStack) + " behind";
     var cls = classify(s.hole, s.flop);
     var topRank = Math.max.apply(null, s.flop.map(function (c) { return c.rank; }));
     var over = s.hole[0].rank === s.hole[1].rank && s.hole[0].rank > topRank;
@@ -515,10 +534,11 @@
       row.append(b);
     }
     if (s.type === "lead") {
-      var raiseTo = s.bet * 3;
+      var callAmt = Math.min(s.bet, s.heroStack);
+      var raiseTo = Math.min(s.bet * 3, s.heroStack);
       btn("Fold", "fold", "fold", "f");
-      btn("Call " + money(s.bet), "call", "call", "c");
-      btn("Raise to " + money(raiseTo), "raise", "raise", "r");
+      btn("Call " + money(callAmt) + (callAmt === s.heroStack ? " (all-in)" : ""), "call", "call", "c");
+      if (s.heroStack > s.bet) btn(raiseTo === s.heroStack ? "All-in " + money(raiseTo) : "Raise to " + money(raiseTo), "raise", "raise", "r");
     } else {
       btn("Check", "call", "check", "c");
       btn("Bet half pot (" + money(s.potNow * 0.5) + ")", "raise", "bethalf", "h");
@@ -572,8 +592,9 @@
       var callers = s.villains.filter(function (v) { return v.act === "call"; }).length;
       var behind = s.villains.filter(function (v) { return v.act === "behind"; }).length;
       if (callers) why.push(callers + (callers === 1 ? " player has" : " players have") + " already called, which narrows them to pairs and draws too.");
-      if (behind) why.push(behind + (behind === 1 ? " player is" : " players are") + " still to act behind you and can raise, so you'd realize only about " + pctText(r.realize) + " of your equity.");
-      why.push("Calling " + money(s.bet) + " into " + money(s.potNow) + " needs " + pctText(r.needed) + "; you have " + pctText(r.a.eq) +
+      if (r.allInCall) why.push("The money's all in on this call, so nobody can bet you off your equity: you realize all of it.");
+      else if (behind) why.push(behind + (behind === 1 ? " player is" : " players are") + " still to act behind you and can raise, so you'd realize only about " + pctText(r.realize) + " of your equity.");
+      why.push("Calling " + money(Math.min(s.bet, s.heroStack)) + " into " + money(s.potNow) + " needs " + pctText(r.needed) + "; you have " + pctText(r.a.eq) +
         (r.best === "fold" ? ", not enough once you count what you'll actually realize." : r.best === "call" ? ", enough to continue but not to build the pot." : ", strong enough to raise for value and charge the draws."));
     } else {
       why.push("With " + (r.players - 1) + " opponents, your fair share of the pot is " + pctText(r.fair) + ". You have " + pctText(r.a.eq) + ".");
