@@ -150,17 +150,42 @@ function threeBetSizeText(hero, opener) {
 
 // ===== OPENING RANGES AT A GLANCE =====
 
+// Cash (the standard chart) or Live $1/2, which folds the weaker offsuit big-card hands from early and
+// middle seats (they get dominated in big multiway live pots), as the practice table's Live mode does.
+var glanceMode = "cash";
+
+function liveOpenChart(pos) {
+  var chart = buildChart({ stage: "cash", stack: "deep", hero: pos, spot: "unopened", opener: null });
+  var group = positionGroup(pos);
+  if (group !== "early" && group !== "middle") return chart;
+  var combos = {};
+  chart.cells.forEach(function (cell) {
+    var offsuit = cell.hand.length === 3 && cell.hand[2] === "o";
+    if (cell.action === "Raise" && offsuit) {
+      var openLine = getRecommendation({ stage: "cash", stack: "deep", stackBB: 100, hero: pos, spot: "unopened", opener: null, hand: cell.hand }).lines[0];
+      if (handPercentile(cell.hand, false) > openLine * 0.6) cell.action = "Fold";
+    }
+    combos[cell.action] = (combos[cell.action] || 0) + combosOf(cell.hand);
+  });
+  chart.combos = combos;
+  return chart;
+}
+
 function renderGlance() {
   var host = $("glance");
+  host.replaceChildren();
+  document.querySelectorAll("#glance-mode button").forEach(function (b) {
+    var on = b.dataset.mode === glanceMode; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on ? "true" : "false");
+  });
   OPENERS_ORDER.filter(function (p) { return p !== "BB"; }).forEach(function (pos) {
-    var chart = buildChart({ stage: "cash", stack: "deep", hero: pos, spot: "unopened", opener: null });
+    var chart = glanceMode === "live" ? liveOpenChart(pos) : buildChart({ stage: "cash", stack: "deep", hero: pos, spot: "unopened", opener: null });
     var fig = el("figure", "mini");
     var cap = el("figcaption");
     cap.append(el("span", "pos-chip g-" + POSITION_INFO[pos].group.toLowerCase(), pos),
       el("span", "mini-pct", pctOfCombos(chart.combos.Raise || 0)));
     var gridHost = el("div");
     renderGrid(gridHost, chart, true);
-    fig.append(cap, el("p", "size-line", openSizeText(pos)), gridHost);
+    fig.append(cap, el("p", "size-line", glanceMode === "live" ? "Raise to $12–15 live" : openSizeText(pos)), gridHost);
     host.append(fig);
   });
   // The BB can't open (if it folds to the BB, the hand is over), so its tile shows its most common job:
@@ -537,6 +562,9 @@ function renderLimpGlance() {
   });
 }
 
+document.querySelectorAll("#glance-mode button").forEach(function (b) {
+  b.addEventListener("click", function () { glanceMode = b.dataset.mode; renderGlance(); });
+});
 renderGlance();
 renderThreeBetGlance();
 renderLimpGlance();

@@ -53,6 +53,11 @@
       <section class="block" id="opening" aria-labelledby="glance-title">
         <h2 id="glance-title">Opening ranges at a glance</h2>
         <p class="lede">Folded to you, 100bb cash game. Green is a raise, dark is a fold. Watch the range grow as you move toward the button. Hover or tap a square to see the hand. Each chart shows how much to raise.</p>
+        <div class="rs-toggle" id="glance-mode" role="group" aria-label="Which game">
+          <button type="button" data-mode="cash" class="on" aria-pressed="true">Cash (standard chart)</button>
+          <button type="button" data-mode="live" aria-pressed="false">Live $1/2</button>
+        </div>
+        <p class="how">Live $1/2 folds the weaker offsuit big-card hands (like AJo, ATo, KQo, KJo) from early and middle seats: your raise gets several callers live, and those hands flop dominated pairs. Your practice table uses this version in Live mode.</p>
         <div class="glance" id="glance"></div>
       </section>
 
@@ -178,6 +183,6 @@
 
     <script src="engine.js?v=29"></script>
     <script src="bots.js?v=29"></script>
-    <script src="charts.js?v=35"></script>
+    <script src="charts.js?v=36"></script>
   </body>
 </html>
