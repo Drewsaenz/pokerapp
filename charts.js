@@ -162,6 +162,23 @@ function renderGlance() {
     fig.append(cap, el("p", "size-line", openSizeText(pos)), gridHost);
     host.append(fig);
   });
+  // The BB can't open (if it folds to the BB, the hand is over), so its tile shows its most common job:
+  // defending against a button raise. The full set is in "Someone raised before you".
+  var bb = buildChart({ stage: "cash", stack: "deep", hero: "BB", spot: "facingRaise", opener: "BTN" });
+  var fig = el("figure", "mini bb-tile");
+  var cap = el("figcaption");
+  cap.append(el("span", "pos-chip g-blinds", "BB"),
+    el("span", "mini-pct", "Call " + pctOfCombos(bb.combos.Call || 0) + " · re-raise " + pctOfCombos(bb.combos["3-Bet"] || 0)));
+  var note = el("p", "size-line");
+  note.append(document.createTextNode("Can't open: shown defending vs a button raise. "));
+  var link = el("a", null, "All BB spots ↓");
+  link.href = "#threebets";
+  link.addEventListener("click", function () { tbRaiser = "BTN"; renderThreeBetGlance(); });
+  note.append(link);
+  var gridHost = el("div");
+  renderGrid(gridHost, bb, true);
+  fig.append(cap, note, gridHost);
+  host.append(fig);
 }
 
 // ===== 3-BET RANGES AT A GLANCE =====
