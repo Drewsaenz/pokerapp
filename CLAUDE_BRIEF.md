@@ -50,7 +50,8 @@ Hands are ranked once (169 hand types), and each spot uses a percentage of all 1
   - Facing a limp-reraise: 4-bet AA and KK, call QQ and AK, fold everything else.
 - **Live $1/2 adjustments:**
   - Open to about $12–15; isolate limpers with about $12 plus $4 per limper.
-  - Over-limp speculative hands; fold dominated offsuit hands from early position.
+  - Facing limpers: isolate strong hands to about $13 + $4 per limper; over-limp ($2) pairs, suited aces and suited connectors (more of them from early seats, since late seats isolate most hands they play); fold the rest. The BB raises its top 10% over limpers and checks the rest.
+  - Fold dominated offsuit hands from early position.
   - With a raise and a call in front of you, 3-bet or fold offsuit hands.
   - Call a 3-bet tightly: flat QQ, JJ and AQs out of position, and fold offsuit hands.
   - Set-mine pairs when deep.

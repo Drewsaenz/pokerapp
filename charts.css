@@ -207,3 +207,34 @@ table.spot { width: 100%; border-collapse: collapse; font-size: 13px; }
   .quad { padding: 24px 22px; }
   .bot-stats { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Sizes and the 3-bet glance */
+.size-line { margin: 0; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.35; }
+.raiser-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.raiser {
+  font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+}
+.raiser.on { background: var(--brass); color: #1c1606; border-color: var(--brass); }
+.raiser:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+/* Range slider */
+.rs-controls { display: flex; flex-direction: column; gap: 10px; }
+.rs-label { font-size: 15px; font-weight: 600; }
+.rs-label output { color: var(--brass); font-variant-numeric: tabular-nums; }
+#rs-slider { width: 100%; max-width: 560px; accent-color: var(--brass); height: 28px; }
+.rs-seats { display: flex; flex-wrap: wrap; gap: 6px; }
+.rs-rank { display: flex; flex-direction: column; gap: 4px; }
+.rs-toggle { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel-2); align-self: flex-start; }
+.rs-toggle button { font: inherit; font-size: 13px; padding: 7px 12px; border: none; background: transparent; color: var(--muted); cursor: pointer; }
+.rs-toggle button.on { background: var(--brass); color: #1c1606; font-weight: 700; }
+.rs-toggle button:focus-visible { outline: 2px solid var(--brass); outline-offset: -2px; }
+.field-label { font-size: 12px; color: var(--muted); }
+.cell.edge { box-shadow: inset 0 0 0 2px #fff; }
+#rs-grid .cell.pair { box-shadow: none; }
+#rs-grid .cell.pair.a-fold { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08); }
+#rs-grid .cell.edge { box-shadow: inset 0 0 0 2px #fff; }
+.bb-tile .size-line a { color: var(--brass); }
+.glance .bb-tile { grid-column: auto; }
+.a-check { background: #2c4636; color: #9cb2a4; }
+.swatch.a-check { box-shadow: inset 0 0 0 1px var(--line); }

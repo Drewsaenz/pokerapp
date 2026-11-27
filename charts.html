@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Texas Hold'em position guide and pre-flop range charts for every seat, stack depth and tournament stage." />
     <title>Hold'em Range Charts</title>
-    <link rel="stylesheet" href="charts.css?v=29" />
+    <link rel="stylesheet" href="charts.css?v=35" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
@@ -24,6 +24,9 @@
       <nav class="jump" aria-label="On this page">
         <a href="#positions">Positions</a>
         <a href="#opening">Opening ranges</a>
+        <a href="#threebets">Facing a raise</a>
+        <a href="#limps">Facing limpers</a>
+        <a href="#slider">Range slider</a>
         <a href="#explorer">Range explorer</a>
         <a href="#players">Player types</a>
         <a href="#rules">Rules of thumb</a>
@@ -49,8 +52,49 @@
 
       <section class="block" id="opening" aria-labelledby="glance-title">
         <h2 id="glance-title">Opening ranges at a glance</h2>
-        <p class="lede">Folded to you, 100bb cash game. Green is a raise, dark is a fold. Watch the range grow as you move toward the button. Hover or tap a square to see the hand.</p>
+        <p class="lede">Folded to you, 100bb cash game. Green is a raise, dark is a fold. Watch the range grow as you move toward the button. Hover or tap a square to see the hand. Each chart shows how much to raise.</p>
         <div class="glance" id="glance"></div>
+      </section>
+
+      <section class="block" id="threebets" aria-labelledby="tb-title">
+        <h2 id="tb-title">Someone raised before you</h2>
+        <p class="lede">Someone raised and it's your turn: call, re-raise or fold. Tap who raised, then find your seat. Amber is a call, blue is a re-raise, dark is a fold. Re-raise to about 3.25× their raise when you'll act after them, 4× from the blinds.</p>
+        <div class="raiser-pick" id="raiser-pick" role="group" aria-label="Who raised"></div>
+        <p class="how" id="tb-note"></p>
+        <div class="glance" id="tb-glance"></div>
+      </section>
+
+      <section class="block" id="limps" aria-labelledby="lp-title">
+        <h2 id="lp-title">Someone limped before you</h2>
+        <p class="lede">Someone just called the big blind instead of raising, and it's your turn. That's common at live $1/2. Green: raise big to isolate the limper. Amber: over-limp (call $2) with hands that can make a hidden big hand. Dark: fold. In the big blind you can't fold for free, so the dark squares there mean check.</p>
+        <div class="raiser-pick" id="limp-pick" role="group" aria-label="How many limpers"></div>
+        <p class="how" id="limp-note"></p>
+        <div class="glance" id="limp-glance"></div>
+      </section>
+
+      <section class="block" id="slider" aria-labelledby="rs-title">
+        <h2 id="rs-title">Range slider</h2>
+        <p class="lede">Drag to pick a share of all starting hands and watch the chart fill in from the strongest hands down. Outlined squares are the last hands in at that setting.</p>
+        <div class="rs-controls">
+          <label class="rs-label" for="rs-slider">Top <output id="rs-out">15%</output> of hands</label>
+          <input type="range" id="rs-slider" min="0" max="100" step="0.5" value="15" />
+          <div class="rs-seats" id="rs-seats" role="group" aria-label="Jump to a seat's opening range"></div>
+          <div class="rs-rank">
+            <span class="field-label" id="rs-rank-label">Ranked by</span>
+            <div class="rs-toggle" id="rs-rank" role="group" aria-labelledby="rs-rank-label">
+              <button type="button" data-rank="play" class="on" aria-pressed="true">How well they play (deep stacks)</button>
+              <button type="button" data-rank="shove" aria-pressed="false">All-in strength (short stacks)</button>
+            </div>
+          </div>
+        </div>
+        <div class="explorer-body">
+          <div id="rs-grid"></div>
+          <div class="explorer-side">
+            <p class="summary" id="rs-summary"></p>
+            <p class="how" id="rs-edge"></p>
+            <p class="how">Each square is worth a different amount: a pair is 6 combos, a suited hand 4, an offsuit hand 12, out of 1,326. That's why the suited side fills faster than the offsuit side.</p>
+          </div>
+        </div>
       </section>
 
       <section class="block" id="explorer" aria-labelledby="ex-title">
@@ -134,6 +178,6 @@
 
     <script src="engine.js?v=29"></script>
     <script src="bots.js?v=29"></script>
-    <script src="charts.js?v=29"></script>
+    <script src="charts.js?v=35"></script>
   </body>
 </html>

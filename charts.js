@@ -6,10 +6,11 @@ const STACK_BB = { deep: 100, mid: 30, short: 12 };
 
 const ACTION_STYLE = {
   "Raise": { cls: "a-raise", label: "Raise" },
-  "3-Bet": { cls: "a-3bet", label: "3-bet" },
+  "3-Bet": { cls: "a-3bet", label: "Re-raise (3-bet)" },
   "All-In": { cls: "a-allin", label: "All-in" },
   "Call": { cls: "a-call", label: "Call" },
-  "Fold": { cls: "a-fold", label: "Fold" }
+  "Fold": { cls: "a-fold", label: "Fold" },
+  "Check": { cls: "a-check", label: "Check (free)" }
 };
 
 const POSITION_INFO = {
@@ -129,6 +130,24 @@ function renderPositions() {
   });
 }
 
+// ===== SIZES =====
+// Open: 2.5bb (3bb from the small blind); live $1/2 opens run $12-15.
+// 3-bet: about 3.25x the open in position, 4x out of position (the blinds always are), as in the practice table.
+function openSizeBB(pos) { return pos === "SB" ? 3 : 2.5; }
+function halfStep(x) { return Math.round(x * 2) / 2; }
+function inPositionVs(hero, opener) { return hero !== "SB" && hero !== "BB" && OPENERS_ORDER.indexOf(hero) > OPENERS_ORDER.indexOf(opener); }
+function openSizeText(pos) {
+  var bb = openSizeBB(pos);
+  return "Raise to " + bb + "bb ($" + (bb * 2) + ") · live $12–15";
+}
+function threeBetSizeText(hero, opener) {
+  var ip = inPositionVs(hero, opener);
+  var mult = ip ? 3.25 : 4;
+  var to = halfStep(openSizeBB(opener) * mult);
+  var live = Math.round(15 * mult / 5) * 5;
+  return "Re-raise to " + to + "bb ($" + (to * 2) + ") · live $" + live + " vs a $15 raise · " + (ip ? "in position" : "out of position");
+}
+
 // ===== OPENING RANGES AT A GLANCE =====
 
 function renderGlance() {
@@ -141,9 +160,57 @@ function renderGlance() {
       el("span", "mini-pct", pctOfCombos(chart.combos.Raise || 0)));
     var gridHost = el("div");
     renderGrid(gridHost, chart, true);
-    fig.append(cap, gridHost);
+    fig.append(cap, el("p", "size-line", openSizeText(pos)), gridHost);
     host.append(fig);
   });
+  // The BB can't open (if it folds to the BB, the hand is over), so its tile shows its most common job:
+  // defending against a button raise. The full set is in "Someone raised before you".
+  var bb = buildChart({ stage: "cash", stack: "deep", hero: "BB", spot: "facingRaise", opener: "BTN" });
+  var fig = el("figure", "mini bb-tile");
+  var cap = el("figcaption");
+  cap.append(el("span", "pos-chip g-blinds", "BB"),
+    el("span", "mini-pct", "Call " + pctOfCombos(bb.combos.Call || 0) + " · re-raise " + pctOfCombos(bb.combos["3-Bet"] || 0)));
+  var note = el("p", "size-line");
+  note.append(document.createTextNode("Can't open: shown defending vs a button raise. "));
+  var link = el("a", null, "All BB spots ↓");
+  link.href = "#threebets";
+  link.addEventListener("click", function () { tbRaiser = "BTN"; renderThreeBetGlance(); });
+  note.append(link);
+  var gridHost = el("div");
+  renderGrid(gridHost, bb, true);
+  fig.append(cap, note, gridHost);
+  host.append(fig);
+}
+
+// ===== 3-BET RANGES AT A GLANCE =====
+// Pick the raiser; every seat that acts after them gets its 3-bet / call / fold chart and 3-bet size.
+var tbRaiser = "CO";
+
+function renderThreeBetGlance() {
+  var pick = $("raiser-pick");
+  pick.replaceChildren();
+  OPENERS_ORDER.slice(0, 8).forEach(function (pos) {
+    var b = el("button", "raiser" + (pos === tbRaiser ? " on" : ""), pos);
+    b.type = "button";
+    b.setAttribute("aria-pressed", pos === tbRaiser ? "true" : "false");
+    b.addEventListener("click", function () { tbRaiser = pos; renderThreeBetGlance(); });
+    pick.append(b);
+  });
+  var host = $("tb-glance");
+  host.replaceChildren();
+  OPENERS_ORDER.slice(OPENERS_ORDER.indexOf(tbRaiser) + 1).forEach(function (pos) {
+    var chart = buildChart({ stage: "cash", stack: "deep", hero: pos, spot: "facingRaise", opener: tbRaiser });
+    var fig = el("figure", "mini");
+    var cap = el("figcaption");
+    cap.append(el("span", "pos-chip g-" + POSITION_INFO[pos].group.toLowerCase(), pos),
+      el("span", "mini-pct", "Call " + pctOfCombos(chart.combos.Call || 0) + " · re-raise " + pctOfCombos(chart.combos["3-Bet"] || 0)));
+    var gridHost = el("div");
+    renderGrid(gridHost, chart, true);
+    fig.append(cap, el("p", "size-line", threeBetSizeText(pos, tbRaiser)), gridHost);
+    host.append(fig);
+  });
+  $("tb-note").textContent = "The " + tbRaiser + " raises to " + openSizeBB(tbRaiser) + "bb ($" + (openSizeBB(tbRaiser) * 2) + "), or about $15 live, and it's your turn. " +
+    "Find your seat below (100bb stacks). If other players already called, re-raise one raise-size bigger for each of them.";
 }
 
 // ===== RANGE EXPLORER =====
@@ -185,8 +252,9 @@ function explorerSummary(opts, chart) {
   var spot = opts.spot === "unopened"
     ? "Folded to you in the " + opts.hero
     : "The " + opts.opener + " raises and you're in the " + opts.hero;
+  var size = opts.stack === "short" ? "" : (opts.spot === "unopened" ? " Size: " + openSizeText(opts.hero).toLowerCase().replace("raise", "raise") + "." : " Size: " + threeBetSizeText(opts.hero, opts.opener) + ".");
   return spot + ", " + stackText + ", " + game + ": " + (parts.length ? parts.join(", ") : "nothing") +
-    " of all starting hands, and fold the rest. " + STAGE_NOTES[opts.stage];
+    " of all starting hands, and fold the rest." + size + " " + STAGE_NOTES[opts.stage];
 }
 
 function renderExplorer() {
@@ -353,7 +421,125 @@ function renderPlayers() {
 }
 
 renderPositions();
+// ===== RANGE SLIDER =====
+// Shade the top X% of starting hands (by share of the 1,326 combos), using the same rankings as the charts.
+var rsRank = "play";
+var RS_SEATS = [["UTG", 15], ["UTG+1", 17], ["UTG+2", 19], ["LJ", 22], ["HJ", 26], ["CO", 31], ["BTN", 45], ["SB", 42]];
+
+function renderSlider() {
+  var pct = parseFloat($("rs-slider").value);
+  var shove = rsRank === "shove";
+  $("rs-out").textContent = pct + "%";
+  var cells = [];
+  var combos = { Raise: 0, Fold: 0 };
+  var hands = 0;
+  var edge = [];
+  for (var r = 0; r < 13; r++) {
+    for (var c = 0; c < 13; c++) {
+      var hand = handAt(r, c);
+      var p = handPercentile(hand, shove) * 100;
+      var inRange = p <= pct + 1e-9;
+      cells.push({ hand: hand, action: inRange ? "Raise" : "Fold", edge: inRange && p > pct - 2.5 });
+      combos[inRange ? "Raise" : "Fold"] += combosOf(hand);
+      if (inRange) { hands += 1; if (p > pct - 2.5) edge.push({ hand: hand, p: p }); }
+    }
+  }
+  renderGrid($("rs-grid"), { cells: cells, combos: combos }, false);
+  $("rs-grid").querySelectorAll(".cell").forEach(function (node, i) { if (cells[i].edge) node.classList.add("edge"); });
+  var seat = RS_SEATS.filter(function (x) { return Math.abs(x[1] - pct) < 0.75; })[0];
+  $("rs-summary").textContent = hands + " of 169 hands, " + combos.Raise + " of 1,326 combos (" + pctOfCombos(combos.Raise) + ")." +
+    (seat ? " That's about the " + seat[0] + "'s opening range at 100bb." : "");
+  edge.sort(function (a, b) { return b.p - a.p; });
+  $("rs-edge").textContent = edge.length ? "Last in: " + edge.slice(0, 8).map(function (e) { return e.hand; }).join(", ") + "." : "";
+  document.querySelectorAll("#rs-seats button").forEach(function (b) { b.classList.toggle("on", Math.abs(parseFloat(b.dataset.pct) - pct) < 0.01); });
+}
+
+(function initSlider() {
+  var seats = $("rs-seats");
+  RS_SEATS.forEach(function (x) {
+    var b = el("button", "raiser", x[0] + " " + x[1] + "%");
+    b.type = "button";
+    b.dataset.pct = x[1];
+    b.addEventListener("click", function () { $("rs-slider").value = x[1]; renderSlider(); });
+    seats.append(b);
+  });
+  $("rs-slider").addEventListener("input", renderSlider);
+  document.querySelectorAll("#rs-rank button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      rsRank = b.dataset.rank;
+      document.querySelectorAll("#rs-rank button").forEach(function (x) {
+        var on = x === b; x.classList.toggle("on", on); x.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      renderSlider();
+    });
+  });
+  renderSlider();
+})();
+
+// ===== SOMEONE LIMPED BEFORE YOU (live $1/2) =====
+// Same rules as the practice table's Live mode: isolate strong hands with a big raise, over-limp hands
+// that make big hidden hands (pairs, suited aces, suited connectors), fold the rest. The BB raises its
+// top 10% and checks everything else for free.
+var lpCount = 1;
+
+function isSpeculativeHand(hand) {
+  if (hand.length === 2) return true;
+  if (hand[2] !== "s") return false;
+  var order = "23456789TJQKA";
+  return hand[0] === "A" || order.indexOf(hand[0]) - order.indexOf(hand[1]) <= 2;
+}
+
+function limpedAction(hand, seat) {
+  var p = handPercentile(hand, false);
+  if (seat === "BB") return p <= 0.1 ? "Raise" : "Check";
+  var openLine = getRecommendation({ stage: "cash", stack: "deep", stackBB: 100, hero: seat, spot: "unopened", opener: null, hand: hand }).lines[0];
+  var late = positionGroup(seat) === "late";
+  if (p <= openLine * 0.8) return "Raise";
+  if (isSpeculativeHand(hand) && (late || p <= 0.35)) return "Call";
+  return "Fold";
+}
+
+function renderLimpGlance() {
+  var pick = $("limp-pick");
+  pick.replaceChildren();
+  [1, 2, 3].forEach(function (n) {
+    var b = el("button", "raiser" + (n === lpCount ? " on" : ""), n === 3 ? "3+ limpers" : n + (n === 1 ? " limper" : " limpers"));
+    b.type = "button";
+    b.setAttribute("aria-pressed", n === lpCount ? "true" : "false");
+    b.addEventListener("click", function () { lpCount = n; renderLimpGlance(); });
+    pick.append(b);
+  });
+  var iso = 13 + 4 * lpCount;
+  $("limp-note").textContent = "Live $1/2, 100bb+. With " + (lpCount === 3 ? "3 or more limpers" : lpCount + (lpCount === 1 ? " limper" : " limpers")) +
+    ", isolate to about $" + iso + " ($13 plus $4 per limper). Over-limping costs $2.";
+  var host = $("limp-glance");
+  host.replaceChildren();
+  ["UTG+1", "UTG+2", "LJ", "HJ", "CO", "BTN", "SB", "BB"].forEach(function (seat) {
+    var cells = [], combos = {};
+    for (var r = 0; r < 13; r++) for (var c = 0; c < 13; c++) {
+      var hand = handAt(r, c);
+      var a = limpedAction(hand, seat);
+      cells.push({ hand: hand, action: a });
+      combos[a] = (combos[a] || 0) + combosOf(hand);
+    }
+    var fig = el("figure", "mini");
+    var cap = el("figcaption");
+    var info = seat === "BB" ? "Raise " + pctOfCombos(combos.Raise || 0) + " · check the rest"
+      : "Raise " + pctOfCombos(combos.Raise || 0) + " · limp " + pctOfCombos(combos.Call || 0);
+    cap.append(el("span", "pos-chip g-" + POSITION_INFO[seat].group.toLowerCase(), seat), el("span", "mini-pct", info));
+    var size = seat === "BB" ? "Raise to about $" + (iso + 2) + ", or check for free"
+      : seat === "SB" ? "Raise to about $" + (iso + 2) + " · complete for $1"
+      : "Isolate to about $" + iso + " · over-limp $2";
+    var gridHost = el("div");
+    renderGrid(gridHost, { cells: cells, combos: combos }, true);
+    fig.append(cap, el("p", "size-line", size), gridHost);
+    host.append(fig);
+  });
+}
+
 renderGlance();
+renderThreeBetGlance();
+renderLimpGlance();
 renderPlayers();
 ["UTG", "BTN"].forEach(function (pos) {
   var chart = buildChart({ stage: "cash", stack: "deep", hero: pos, spot: "unopened", opener: null });
