@@ -46,7 +46,7 @@ A cheat sheet for positions and pre-flop ranges, computed live from `engine.js`,
 
 - **Positions**: every seat's group, acting order before and after the flop, how often it opens, and what that seat means in practice.
 - **Opening ranges at a glance**: a 13×13 grid for each seat, folded to you at 100bb, with the raise size (2.5bb, 3bb from the small blind; 2–15 live).
-- **3-bet ranges at a glance**: pick who raised, and see every seat after them: 3-bet, call or fold, with the 3-bet size (about 3.25× in position, 4× from the blinds, and the live dollar amount against a 5 open).
+- **When someone raises before you** (3-bet ranges at a glance): pick who raised, and see every seat after them: 3-bet, call or fold, with the 3-bet size (about 3.25× in position, 4× from the blinds, and the live dollar amount against a 5 open).
 - **Range explorer**: pick folded-to-you or facing a raise, your seat, the raiser, stack depth and game stage, and see the full raise / 3-bet / call / all-in / fold chart with its share of hands.
 - **Player types**: tight vs loose and passive vs aggressive, with what each type (TAG, LAG, Nit, calling station) means, how they play, how to spot them, how to beat them, and the practice-table bots' actual numbers for that style.
 - **Rules of thumb** for using them.
