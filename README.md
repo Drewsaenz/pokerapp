@@ -45,8 +45,8 @@ The thresholds are approximations of common charts, not solver output. All the n
 A cheat sheet for positions and pre-flop ranges, computed live from `engine.js`, so it always matches the simulator, the chart check and the bots:
 
 - **Positions**: every seat's group, acting order before and after the flop, how often it opens, and what that seat means in practice.
-- **Opening ranges at a glance**: a 13×13 grid for each seat, folded to you at 100bb, with the raise size (2.5bb, 3bb from the small blind; 2–15 live).
-- **When someone raises before you** (3-bet ranges at a glance): pick who raised, and see every seat after them: 3-bet, call or fold, with the 3-bet size (about 3.25× in position, 4× from the blinds, and the live dollar amount against a 5 open).
+- **Opening ranges at a glance**: a 13×13 grid for each seat, folded to you at 100bb, with the raise size (2.5bb, 3bb from the small blind; $12–15 live). A Cash / Live $1/2 switch shows the live version, which folds the weaker offsuit big-card hands (AJo, ATo, KQo, KJo) from early and middle seats, as the practice table does in Live mode.
+- **Someone raised before you**: pick who raised, and see every seat after them as call, re-raise (3-bet) or fold, with the re-raise size (about 3.25× in position, 4× from the blinds, and the live dollar amount against a $15 raise).
 - **Someone limped before you** (live $1/2): pick 1, 2 or 3+ limpers and see every seat's chart: raise big to isolate (about $13 plus $4 per limper), over-limp for $2 with pairs, suited aces and suited connectors, or fold; the big blind raises its top 10% and checks the rest. Same rules as the practice table's Live mode.
 - **Range slider**: drag from 0% to 100% and the grid shades the top share of starting hands (by combos), with the hand and combo counts, the last hands in outlined, seat buttons that jump to each opening range, and a switch between the deep-stack ranking and the all-in ranking.
 - **Range explorer**: pick folded-to-you or facing a raise, your seat, the raiser, stack depth and game stage, and see the full raise / 3-bet / call / all-in / fold chart with its share of hands.
