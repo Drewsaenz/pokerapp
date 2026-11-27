@@ -9,7 +9,8 @@ const ACTION_STYLE = {
   "3-Bet": { cls: "a-3bet", label: "Re-raise (3-bet)" },
   "All-In": { cls: "a-allin", label: "All-in" },
   "Call": { cls: "a-call", label: "Call" },
-  "Fold": { cls: "a-fold", label: "Fold" }
+  "Fold": { cls: "a-fold", label: "Fold" },
+  "Check": { cls: "a-check", label: "Check (free)" }
 };
 
 const POSITION_INFO = {
@@ -475,8 +476,70 @@ function renderSlider() {
   renderSlider();
 })();
 
+// ===== SOMEONE LIMPED BEFORE YOU (live $1/2) =====
+// Same rules as the practice table's Live mode: isolate strong hands with a big raise, over-limp hands
+// that make big hidden hands (pairs, suited aces, suited connectors), fold the rest. The BB raises its
+// top 10% and checks everything else for free.
+var lpCount = 1;
+
+function isSpeculativeHand(hand) {
+  if (hand.length === 2) return true;
+  if (hand[2] !== "s") return false;
+  var order = "23456789TJQKA";
+  return hand[0] === "A" || order.indexOf(hand[0]) - order.indexOf(hand[1]) <= 2;
+}
+
+function limpedAction(hand, seat) {
+  var p = handPercentile(hand, false);
+  if (seat === "BB") return p <= 0.1 ? "Raise" : "Check";
+  var openLine = getRecommendation({ stage: "cash", stack: "deep", stackBB: 100, hero: seat, spot: "unopened", opener: null, hand: hand }).lines[0];
+  var late = positionGroup(seat) === "late";
+  if (p <= openLine * 0.8) return "Raise";
+  if (isSpeculativeHand(hand) && (late || p <= 0.35)) return "Call";
+  return "Fold";
+}
+
+function renderLimpGlance() {
+  var pick = $("limp-pick");
+  pick.replaceChildren();
+  [1, 2, 3].forEach(function (n) {
+    var b = el("button", "raiser" + (n === lpCount ? " on" : ""), n === 3 ? "3+ limpers" : n + (n === 1 ? " limper" : " limpers"));
+    b.type = "button";
+    b.setAttribute("aria-pressed", n === lpCount ? "true" : "false");
+    b.addEventListener("click", function () { lpCount = n; renderLimpGlance(); });
+    pick.append(b);
+  });
+  var iso = 13 + 4 * lpCount;
+  $("limp-note").textContent = "Live $1/2, 100bb+. With " + (lpCount === 3 ? "3 or more limpers" : lpCount + (lpCount === 1 ? " limper" : " limpers")) +
+    ", isolate to about $" + iso + " ($13 plus $4 per limper). Over-limping costs $2.";
+  var host = $("limp-glance");
+  host.replaceChildren();
+  ["UTG+1", "UTG+2", "LJ", "HJ", "CO", "BTN", "SB", "BB"].forEach(function (seat) {
+    var cells = [], combos = {};
+    for (var r = 0; r < 13; r++) for (var c = 0; c < 13; c++) {
+      var hand = handAt(r, c);
+      var a = limpedAction(hand, seat);
+      cells.push({ hand: hand, action: a });
+      combos[a] = (combos[a] || 0) + combosOf(hand);
+    }
+    var fig = el("figure", "mini");
+    var cap = el("figcaption");
+    var info = seat === "BB" ? "Raise " + pctOfCombos(combos.Raise || 0) + " · check the rest"
+      : "Raise " + pctOfCombos(combos.Raise || 0) + " · limp " + pctOfCombos(combos.Call || 0);
+    cap.append(el("span", "pos-chip g-" + POSITION_INFO[seat].group.toLowerCase(), seat), el("span", "mini-pct", info));
+    var size = seat === "BB" ? "Raise to about $" + (iso + 2) + ", or check for free"
+      : seat === "SB" ? "Raise to about $" + (iso + 2) + " · complete for $1"
+      : "Isolate to about $" + iso + " · over-limp $2";
+    var gridHost = el("div");
+    renderGrid(gridHost, { cells: cells, combos: combos }, true);
+    fig.append(cap, el("p", "size-line", size), gridHost);
+    host.append(fig);
+  });
+}
+
 renderGlance();
 renderThreeBetGlance();
+renderLimpGlance();
 renderPlayers();
 ["UTG", "BTN"].forEach(function (pos) {
   var chart = buildChart({ stage: "cash", stack: "deep", hero: pos, spot: "unopened", opener: null });

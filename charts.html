@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="Texas Hold'em position guide and pre-flop range charts for every seat, stack depth and tournament stage." />
     <title>Hold'em Range Charts</title>
-    <link rel="stylesheet" href="charts.css?v=34" />
+    <link rel="stylesheet" href="charts.css?v=35" />
     <link rel="icon" type="image/png" href="casino.png" />
   </head>
   <body>
@@ -25,6 +25,7 @@
         <a href="#positions">Positions</a>
         <a href="#opening">Opening ranges</a>
         <a href="#threebets">Facing a raise</a>
+        <a href="#limps">Facing limpers</a>
         <a href="#slider">Range slider</a>
         <a href="#explorer">Range explorer</a>
         <a href="#players">Player types</a>
@@ -61,6 +62,14 @@
         <div class="raiser-pick" id="raiser-pick" role="group" aria-label="Who raised"></div>
         <p class="how" id="tb-note"></p>
         <div class="glance" id="tb-glance"></div>
+      </section>
+
+      <section class="block" id="limps" aria-labelledby="lp-title">
+        <h2 id="lp-title">Someone limped before you</h2>
+        <p class="lede">Someone just called the big blind instead of raising, and it's your turn. That's common at live $1/2. Green: raise big to isolate the limper. Amber: over-limp (call $2) with hands that can make a hidden big hand. Dark: fold. In the big blind you can't fold for free, so the dark squares there mean check.</p>
+        <div class="raiser-pick" id="limp-pick" role="group" aria-label="How many limpers"></div>
+        <p class="how" id="limp-note"></p>
+        <div class="glance" id="limp-glance"></div>
       </section>
 
       <section class="block" id="slider" aria-labelledby="rs-title">
@@ -169,6 +178,6 @@
 
     <script src="engine.js?v=29"></script>
     <script src="bots.js?v=29"></script>
-    <script src="charts.js?v=34"></script>
+    <script src="charts.js?v=35"></script>
   </body>
 </html>
