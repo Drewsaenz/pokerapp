@@ -17,7 +17,7 @@ Read this first. It explains what this app is, how its strategy and bots work, a
 | Page | What it does |
 | --- | --- |
 | **Practice Table** (`holdem.html`) | Full 9-handed hands against 8 bots. Cash, Live $1/2 or tournament modes. Grades every pre-flop decision against the chart and sends hands to Claude for review. |
-| **Multiway Drill** (`multiway.html`) | You raised, 2–7 players called, and on the flop someone leads into you or it's checked to you. Graded on equity against everyone still in. |
+| **Multiway Drill** (`multiway.html`) | You raised, 2–7 players called, and on the flop someone leads into you or it's checked to you. Shows every stack, the effective stack and SPR. Graded on equity against everyone still in. |
 | **Pre-Flop Simulator** (`simulator.html`) | Quick pre-flop quiz across positions, stack depths and tournament stages. |
 | **Range Charts** (`charts.html`) | Positions, opening ranges, a range explorer and player-type cheat sheets. |
 | **Dealer Hold'em** (`dealer.html`) | A trainer for the casino table game where you play against the dealer (standard rules: Ante, Blind and Trips bets; 4×/2×/1× betting), graded against basic strategy and exact river math. |

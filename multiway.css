@@ -58,3 +58,6 @@
   .opp { width: calc(33.333% - 4px); padding: 6px 4px; }
   .opp-act { font-size: 11px; }
 }
+
+.opp-stack { font-size: 11px; color: #cfe4d6; font-variant-numeric: tabular-nums; }
+.hero-stack { margin: 0; font-size: 13px; font-weight: 600; color: #e6f1e9; padding: 3px 12px; border-radius: 999px; background: rgba(8, 16, 11, 0.72); border: 1px solid rgba(227, 179, 65, 0.6); font-variant-numeric: tabular-nums; }
