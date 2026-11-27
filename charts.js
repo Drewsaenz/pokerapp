@@ -403,6 +403,61 @@ function renderPlayers() {
 }
 
 renderPositions();
+// ===== RANGE SLIDER =====
+// Shade the top X% of starting hands (by share of the 1,326 combos), using the same rankings as the charts.
+var rsRank = "play";
+var RS_SEATS = [["UTG", 15], ["UTG+1", 17], ["UTG+2", 19], ["LJ", 22], ["HJ", 26], ["CO", 31], ["BTN", 45], ["SB", 42]];
+
+function renderSlider() {
+  var pct = parseFloat($("rs-slider").value);
+  var shove = rsRank === "shove";
+  $("rs-out").textContent = pct + "%";
+  var cells = [];
+  var combos = { Raise: 0, Fold: 0 };
+  var hands = 0;
+  var edge = [];
+  for (var r = 0; r < 13; r++) {
+    for (var c = 0; c < 13; c++) {
+      var hand = handAt(r, c);
+      var p = handPercentile(hand, shove) * 100;
+      var inRange = p <= pct + 1e-9;
+      cells.push({ hand: hand, action: inRange ? "Raise" : "Fold", edge: inRange && p > pct - 2.5 });
+      combos[inRange ? "Raise" : "Fold"] += combosOf(hand);
+      if (inRange) { hands += 1; if (p > pct - 2.5) edge.push({ hand: hand, p: p }); }
+    }
+  }
+  renderGrid($("rs-grid"), { cells: cells, combos: combos }, false);
+  $("rs-grid").querySelectorAll(".cell").forEach(function (node, i) { if (cells[i].edge) node.classList.add("edge"); });
+  var seat = RS_SEATS.filter(function (x) { return Math.abs(x[1] - pct) < 0.75; })[0];
+  $("rs-summary").textContent = hands + " of 169 hands, " + combos.Raise + " of 1,326 combos (" + pctOfCombos(combos.Raise) + ")." +
+    (seat ? " That's about the " + seat[0] + "'s opening range at 100bb." : "");
+  edge.sort(function (a, b) { return b.p - a.p; });
+  $("rs-edge").textContent = edge.length ? "Last in: " + edge.slice(0, 8).map(function (e) { return e.hand; }).join(", ") + "." : "";
+  document.querySelectorAll("#rs-seats button").forEach(function (b) { b.classList.toggle("on", Math.abs(parseFloat(b.dataset.pct) - pct) < 0.01); });
+}
+
+(function initSlider() {
+  var seats = $("rs-seats");
+  RS_SEATS.forEach(function (x) {
+    var b = el("button", "raiser", x[0] + " " + x[1] + "%");
+    b.type = "button";
+    b.dataset.pct = x[1];
+    b.addEventListener("click", function () { $("rs-slider").value = x[1]; renderSlider(); });
+    seats.append(b);
+  });
+  $("rs-slider").addEventListener("input", renderSlider);
+  document.querySelectorAll("#rs-rank button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      rsRank = b.dataset.rank;
+      document.querySelectorAll("#rs-rank button").forEach(function (x) {
+        var on = x === b; x.classList.toggle("on", on); x.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      renderSlider();
+    });
+  });
+  renderSlider();
+})();
+
 renderGlance();
 renderThreeBetGlance();
 renderPlayers();
