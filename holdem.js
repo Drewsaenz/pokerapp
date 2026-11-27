@@ -2332,6 +2332,15 @@ function handWords(hand) {
 
 // What Hero actually holds on a street, so reviews don't invent draws: "; Hero has Pair of Jacks, no draw"
 // Plain-English holding: "Top pair, King kicker · flush draw", "Overpair (Queens)", "KJ suited"
+// On a paired board, "two pair" is the board's pair plus one pair of the player's own.
+// Returns { own, boardPair } in that case, otherwise null.
+function boardPairTwoPair(best, boardOnly) {
+  if (best.score[0] !== 2 || boardOnly.score[0] !== 1) return null;
+  var bp = boardOnly.score[1];
+  if (best.score[1] !== bp && best.score[2] !== bp) return null;
+  return { own: best.score[1] === bp ? best.score[2] : best.score[1], boardPair: bp };
+}
+
 function describeHolding(hole, board) {
   if (!board.length) {
     var n = handNotation(hole[0].rank >= hole[1].rank ? hole : [hole[1], hole[0]]);
@@ -2343,10 +2352,11 @@ function describeHolding(hole, board) {
   var ranks = Array.from(new Set(board.map(function (c) { return c.rank; }))).sort(function (a, b) { return b - a; });
   var high = Math.max(hole[0].rank, hole[1].rank);
   var text = best.name;
+  var paired = boardPairTwoPair(best, boardOnly);
   if (cat > 0 && cat === boardOnly.score[0] && best.score[1] === boardOnly.score[1]) {
     text = best.name + " on the board (" + RANK_WORDS[high] + " high)";
-  } else if (cat === 1) {
-    var pr = best.score[1];
+  } else if (cat === 1 || paired) {
+    var pr = paired ? paired.own : best.score[1];
     if (hole[0].rank === hole[1].rank) {
       text = (pr > ranks[0] ? "Overpair" : "Pocket pair under the board") + " (" + RANK_PLURAL[pr] + ")";
     } else {
@@ -2354,6 +2364,7 @@ function describeHolding(hole, board) {
       var place = pr === ranks[0] ? "Top pair" : (pr === ranks[1] ? "Middle pair" : "Bottom pair");
       text = place + " (" + RANK_PLURAL[pr] + "), " + RANK_WORDS[kicker] + " kicker";
     }
+    if (paired) text += ", plus the board's pair of " + RANK_PLURAL[paired.boardPair];
   } else if (cat === 0) {
     text = RANK_WORDS[high] + " high";
   }
@@ -2373,7 +2384,10 @@ function heroHolding(h, streetAction) {
   var best = evaluateHand(h.heroCards.concat(streetAction.board));
   var boardOnly = evaluateHand(streetAction.board);
   var onBoard = best.score[0] > 0 && best.score[0] === boardOnly.score[0] && best.score[1] === boardOnly.score[1];
-  var made = best.name + (onBoard ? " (from the board, not Hero's cards)" : "");
+  var paired = boardPairTwoPair(best, boardOnly);
+  var made = paired
+    ? "one pair of " + RANK_PLURAL[paired.own] + " (the " + RANK_PLURAL[paired.boardPair] + " are the board's pair, so this is not a real two pair)"
+    : best.name + (onBoard ? " (from the board, not Hero's cards)" : "");
   var draws = [];
   if (streetAction.board.length < 5) {
     var d = drawInfo(h.heroCards, streetAction.board);
