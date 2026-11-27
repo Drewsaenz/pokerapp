@@ -110,6 +110,10 @@ On a hosted copy the Practice Table can't ask Claude for feedback in the page, s
 
 GitHub Pages lets browsers reuse cached files for up to 10 minutes, so each page links its scripts and stylesheets with a version tag (`holdem.js?v=30`). When you change any `.js` or `.css` file, bump the `?v=` number in `index.html`, `simulator.html` and `holdem.html`, and the version label in the Practice Table header, so visitors get the new code on their next load.
 
+## Using this app with Claude elsewhere
+
+`CLAUDE_BRIEF.md` explains the app, its strategy rules, the bots and the hand-history format for an AI coach. Upload it to a Claude chat or Project (or connect this repo to it) so that Claude can run scenarios and review pasted hands with the same context.
+
 ## Files
 
 ```
