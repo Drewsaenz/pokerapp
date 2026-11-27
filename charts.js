@@ -129,6 +129,24 @@ function renderPositions() {
   });
 }
 
+// ===== SIZES =====
+// Open: 2.5bb (3bb from the small blind); live $1/2 opens run $12-15.
+// 3-bet: about 3.25x the open in position, 4x out of position (the blinds always are), as in the practice table.
+function openSizeBB(pos) { return pos === "SB" ? 3 : 2.5; }
+function halfStep(x) { return Math.round(x * 2) / 2; }
+function inPositionVs(hero, opener) { return hero !== "SB" && hero !== "BB" && OPENERS_ORDER.indexOf(hero) > OPENERS_ORDER.indexOf(opener); }
+function openSizeText(pos) {
+  var bb = openSizeBB(pos);
+  return "Raise to " + bb + "bb ($" + (bb * 2) + ") · live $12–15";
+}
+function threeBetSizeText(hero, opener) {
+  var ip = inPositionVs(hero, opener);
+  var mult = ip ? 3.25 : 4;
+  var to = halfStep(openSizeBB(opener) * mult);
+  var live = Math.round(15 * mult / 5) * 5;
+  return "3-bet to " + to + "bb ($" + (to * 2) + ") · live $" + live + " vs a $15 open · " + (ip ? "in position" : "out of position");
+}
+
 // ===== OPENING RANGES AT A GLANCE =====
 
 function renderGlance() {
@@ -141,9 +159,40 @@ function renderGlance() {
       el("span", "mini-pct", pctOfCombos(chart.combos.Raise || 0)));
     var gridHost = el("div");
     renderGrid(gridHost, chart, true);
-    fig.append(cap, gridHost);
+    fig.append(cap, el("p", "size-line", openSizeText(pos)), gridHost);
     host.append(fig);
   });
+}
+
+// ===== 3-BET RANGES AT A GLANCE =====
+// Pick the raiser; every seat that acts after them gets its 3-bet / call / fold chart and 3-bet size.
+var tbRaiser = "CO";
+
+function renderThreeBetGlance() {
+  var pick = $("raiser-pick");
+  pick.replaceChildren();
+  OPENERS_ORDER.slice(0, 8).forEach(function (pos) {
+    var b = el("button", "raiser" + (pos === tbRaiser ? " on" : ""), pos);
+    b.type = "button";
+    b.setAttribute("aria-pressed", pos === tbRaiser ? "true" : "false");
+    b.addEventListener("click", function () { tbRaiser = pos; renderThreeBetGlance(); });
+    pick.append(b);
+  });
+  var host = $("tb-glance");
+  host.replaceChildren();
+  OPENERS_ORDER.slice(OPENERS_ORDER.indexOf(tbRaiser) + 1).forEach(function (pos) {
+    var chart = buildChart({ stage: "cash", stack: "deep", hero: pos, spot: "facingRaise", opener: tbRaiser });
+    var fig = el("figure", "mini");
+    var cap = el("figcaption");
+    cap.append(el("span", "pos-chip g-" + POSITION_INFO[pos].group.toLowerCase(), pos),
+      el("span", "mini-pct", "3-bet " + pctOfCombos(chart.combos["3-Bet"] || 0) + " · call " + pctOfCombos(chart.combos.Call || 0)));
+    var gridHost = el("div");
+    renderGrid(gridHost, chart, true);
+    fig.append(cap, el("p", "size-line", threeBetSizeText(pos, tbRaiser)), gridHost);
+    host.append(fig);
+  });
+  $("tb-note").textContent = "The " + tbRaiser + " opens to " + openSizeBB(tbRaiser) + "bb ($" + (openSizeBB(tbRaiser) * 2) + "), or about $15 live. " +
+    "Every seat after them, at 100bb. Add one more raise-size to your 3-bet for each player who already called.";
 }
 
 // ===== RANGE EXPLORER =====
@@ -185,8 +234,9 @@ function explorerSummary(opts, chart) {
   var spot = opts.spot === "unopened"
     ? "Folded to you in the " + opts.hero
     : "The " + opts.opener + " raises and you're in the " + opts.hero;
+  var size = opts.stack === "short" ? "" : (opts.spot === "unopened" ? " Size: " + openSizeText(opts.hero).toLowerCase().replace("raise", "raise") + "." : " Size: " + threeBetSizeText(opts.hero, opts.opener) + ".");
   return spot + ", " + stackText + ", " + game + ": " + (parts.length ? parts.join(", ") : "nothing") +
-    " of all starting hands, and fold the rest. " + STAGE_NOTES[opts.stage];
+    " of all starting hands, and fold the rest." + size + " " + STAGE_NOTES[opts.stage];
 }
 
 function renderExplorer() {
@@ -354,6 +404,7 @@ function renderPlayers() {
 
 renderPositions();
 renderGlance();
+renderThreeBetGlance();
 renderPlayers();
 ["UTG", "BTN"].forEach(function (pos) {
   var chart = buildChart({ stage: "cash", stack: "deep", hero: pos, spot: "unopened", opener: null });

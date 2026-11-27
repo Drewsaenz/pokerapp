@@ -207,3 +207,13 @@ table.spot { width: 100%; border-collapse: collapse; font-size: 13px; }
   .quad { padding: 24px 22px; }
   .bot-stats { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Sizes and the 3-bet glance */
+.size-line { margin: 0; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.35; }
+.raiser-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.raiser {
+  font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+}
+.raiser.on { background: var(--brass); color: #1c1606; border-color: var(--brass); }
+.raiser:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
